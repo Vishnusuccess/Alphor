@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Alphor — Phase 2 Autonomous Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<style>
+@keyframes kpiPulse {
+  0% { transform: scale(1); color: inherit; }
+  50% { transform: scale(1.2); color: #4f46e5; }
+  100% { transform: scale(1); color: inherit; }
+}
+.kpi-animate { animation: kpiPulse 0.6s ease; }
+#detailsSidebar { transition: transform 0.3s ease; }
+</style>
+
+<body class="bg-gray-100 text-gray-800">
+
+<!-- HEADER -->
+<header class="bg-gradient-to-r from-indigo-700 to-purple-700 text-white px-6 py-5 flex justify-between items-center shadow-lg">
+  <div>
+    <h1 class="text-3xl font-bold">Alphor</h1>
+    <p class="text-sm text-purple-200">Phase 2 — Autonomous Decision Engine</p>
+  </div>
+  <div class="flex items-center space-x-4">
+    <span class="bg-green-100 text-green-800 px-4 py-1 rounded-full text-sm font-semibold">
+      Autonomous Running
+    </span>
+    <span id="phaseStatus" class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+      Phase 2
+    </span>
+  </div>
+</header>
+
+<!-- KPIs -->
+<section class="grid grid-cols-1 md:grid-cols-5 gap-6 p-6">
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
+    <p class="text-sm text-gray-500">Customers Monitored</p>
+    <p id="totalCustomers" class="text-3xl font-bold">0</p>
+  </div>
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
+    <p class="text-sm text-gray-500">Auto Actions Executed</p>
+    <p id="autoActions" class="text-3xl font-bold text-green-600">0</p>
+  </div>
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
+    <p class="text-sm text-gray-500">Escalations</p>
+    <p id="escalations" class="text-3xl font-bold text-red-600">0</p>
+  </div>
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
+    <p class="text-sm text-gray-500">Retention Value Saved</p>
+    <p id="retentionValue" class="text-3xl font-bold text-purple-600">$0</p>
+  </div>
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
+    <p class="text-sm text-gray-500">Model Confidence</p>
+    <p id="avgConfidence" class="text-3xl font-bold text-blue-600">0%</p>
+  </div>
+</section>
+
+<!-- DECISION FLOW & METRICS -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+  <div class="bg-white p-6 rounded-xl shadow flex flex-col">
+    <h2 class="text-lg font-semibold mb-3">Decision Flow</h2>
+    <div class="flex-1 flex items-center justify-center">
+      <canvas id="decisionFlowChart" style="max-width:400px; max-height:400px;"></canvas>
+    </div>
+  </div>
+
+  <div class="bg-white p-6 rounded-xl shadow flex flex-col">
+    <h2 class="text-lg font-semibold mb-3">Model Accuracy Over Time</h2>
+    <div class="flex-1">
+      <canvas id="accuracyChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- LIVE DECISION FEED -->
+<section class="p-6">
+  <div class="bg-white rounded-xl shadow">
+    <div class="max-h-[500px] overflow-y-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 sticky top-0">
+          <tr>
+            <th class="px-3 py-1.5">Customer</th>
+            <th class="px-3 py-1.5">Risk</th>
+            <th class="px-3 py-1.5">Churn %</th>
+            <th class="px-3 py-1.5">Decision</th>
+            <th class="px-3 py-1.5">Actions</th>
+            <th class="px-3 py-1.5">Discount</th>
+            <th class="px-3 py-1.5">Auto/Escalated</th>
+            <th class="px-3 py-1.5">Confidence</th>
+            <th class="px-3 py-1.5">Details</th>
+          </tr>
+        </thead>
+        <tbody id="decisionFeed"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- DETAILS SIDEBAR -->
+<div id="detailsSidebar" class="fixed top-0 right-0 h-full w-96 bg-white shadow-xl transform translate-x-full z-50 overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center">
+    <h2 id="detailsTitle" class="text-xl font-bold">Customer Details</h2>
+    <button class="text-gray-500 hover:text-gray-700">&times;</button>
+  </div>
+
+  <div class="flex border-b">
+    <button class="tabBtn px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600" data-tab="overview">Overview</button>
+    <button class="tabBtn px-4 py-2 font-semibold text-gray-600" data-tab="communications">Communications</button>
+  </div>
+
+  <div class="p-4 space-y-4">
+    <!-- OVERVIEW -->
+    <div id="tab-overview" class="tabContent">
+      <div id="detailsContent" class="space-y-4"></div>
+
+      <!-- ✅ Support notes -->
+      <div class="bg-gray-50 p-4 rounded-lg shadow">
+        <p class="font-semibold mb-2">Support Notes</p>
+        <textarea id="agentNotes" class="w-full border rounded p-2 text-sm" rows="4" placeholder="Add internal notes..."></textarea>
+        <div class="flex items-center justify-between mt-2">
+          <button id="saveNotesBtn" class="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700 text-sm">
+            Save Notes
+          </button>
+          <span id="notesStatus" class="text-sm font-semibold text-green-700"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMMUNICATIONS -->
+    <div id="tab-communications" class="tabContent hidden">
+      <div>
+        <p class="font-semibold">Email Draft:</p>
+        <pre id="emailDraft" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
+      </div>
+      <div>
+        <p class="font-semibold mt-4">Call Script:</p>
+        <pre id="callScript" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-20 hidden z-40"></div>
+
+<script>
+const API = "http://localhost:8000";
+let decisionFeedData = [];
+let accuracyChart, decisionFlowChart;
+let currentCustomerIdForNotes = null;
+
+/* ---------- RISK LABEL (MATCH YOUR BACKEND STYLE) ---------- */
+function riskLabel(prob){
+  // If your backend uses different thresholds, tweak here.
+  if(prob < 0.20) return {label:"NO_RISK", color:"bg-green-100 text-green-700"};
+  if(prob < 0.40) return {label:"LOW", color:"bg-blue-100 text-blue-700"};
+  if(prob < 0.70) return {label:"MODERATE", color:"bg-orange-100 text-orange-700"};
+  return {label:"HIGH", color:"bg-red-100 text-red-700"};
+}
+
+/* ---------- KPIs ---------- */
+function animateKPI(el){ el.classList.remove("kpi-animate"); void el.offsetWidth; el.classList.add("kpi-animate"); }
+
+function updateKPIs(){
+  totalCustomers.innerText = decisionFeedData.length;
+  animateKPI(totalCustomers);
+
+  autoActions.innerText = decisionFeedData.filter(c => c.auto_executed === true).length;
+  animateKPI(autoActions);
+
+  // ✅ Count true escalations by decision where possible
+  escalations.innerText = decisionFeedData.filter(c => String(c.decision||"").toUpperCase() === "ESCALATE").length;
+  animateKPI(escalations);
+
+  const totalDisc = decisionFeedData.reduce((s,c)=>s + (Number(c.discount)||0), 0);
+  retentionValue.innerText = "$" + totalDisc.toFixed(0);
+  animateKPI(retentionValue);
+
+  const avgConf = decisionFeedData.length
+    ? decisionFeedData.reduce((s,c)=>s + (Number(c.confidence)||0), 0)/decisionFeedData.length
+    : 0;
+  avgConfidence.innerText = (avgConf*100).toFixed(1) + "%";
+  animateKPI(avgConfidence);
+}
+
+/* ---------- LOAD DECISION FEED ---------- */
+async function loadDecisionFeed(){
+  const res = await fetch(`${API}/dashboard/phase2/actions`);
+  decisionFeedData = await res.json();
+  const tbody = document.getElementById("decisionFeed");
+  tbody.innerHTML = "";
+
+  decisionFeedData.forEach(c=>{
+    const cid = c.customer_id || c.ID || "-";
+    const prob = Number(c.churn_prob || 0);
+    const risk = riskLabel(prob);
+    const discount = Number(c.discount || 0);
+    const conf = Number(c.confidence || 0);
+
+    tbody.innerHTML += `
+      <tr class="border-t hover:bg-gray-50 transition">
+        <td class="px-3 py-1.5">${cid}</td>
+        <td class="px-3 py-1.5"><span class="px-2 py-1 rounded ${risk.color} font-semibold">${risk.label}</span></td>
+        <td class="px-3 py-1.5">${(prob*100).toFixed(1)}%</td>
+        <td class="px-3 py-1.5">${c.decision ?? "-"}</td>
+        <td class="px-3 py-1.5">${(c.actions||[]).join(", ") || "-"}</td>
+        <td class="px-3 py-1.5">${discount ? `$${discount}` : "-"}</td>
+        <td class="px-3 py-1.5">${c.auto_executed ? "Auto" : "Escalated"}</td>
+        <td class="px-3 py-1.5">${(conf*100).toFixed(1)}%</td>
+        <td class="px-3 py-1.5">
+          <button onclick="showDetails('${cid}')" class="bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 text-sm">View</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  updateKPIs();
+  renderDecisionFlowChart();
+}
+
+/* ---------- DECISION FLOW CHART ---------- */
+function renderDecisionFlowChart(){
+  const counts = { "NO_RISK":0, "LOW":0, "MODERATE":0, "HIGH":0 };
+  decisionFeedData.forEach(c=>{
+    counts[riskLabel(Number(c.churn_prob || 0)).label]++;
+  });
+
+  if (decisionFlowChart) decisionFlowChart.destroy();
+
+  decisionFlowChart = new Chart(
+    document.getElementById("decisionFlowChart"),
+    {
+      type: "doughnut",
+      data: {
+        labels: Object.keys(counts),
+        datasets: [{
+          data: Object.values(counts),
+          backgroundColor: ["#16a34a","#3b82f6","#f97316","#ef4444"]
+        }]
+      },
+      options: {
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { boxWidth: 18, padding: 20 },
+            maxHeight: 100
+          }
+        }
+      }
+    }
+  );
+}
+
+/* ---------- ACCURACY CHART ---------- */
+async function loadMetrics() {
+  try {
+    // ✅ Get ALL phases history (Phase 0 → Phase 1 → Phase 2)
+    const res = await fetch(`${API}/dashboard/metrics`);
+    if (!res.ok) return;
+
+    let metrics = await res.json();
+    if (!metrics.length) return;
+
+    // ✅ Sort oldest → newest so graph tells the story left → right
+    metrics.sort((a, b) => new Date(a.trained_at) - new Date(b.trained_at));
+
+    const labels = metrics.map(m =>
+      m.trained_at ? new Date(m.trained_at).toLocaleString() : "Unknown"
+    );
+    const acc = metrics.map(m => Number(m.accuracy || 0));
+
+    // ✅ Color points by phase (works if backend stores phase properly)
+    const pointColors = metrics.map(m => {
+      if (m.phase === "PHASE_0") return "#22c55e";     // green
+      if (m.phase === "PHASE_1") return "#3b82f6";     // blue
+      if (m.phase === "PHASE_2") return "#4f46e5";     // indigo
+      return "#64748b";                                // gray
+    });
+
+    if (accuracyChart) accuracyChart.destroy();
+
+    accuracyChart = new Chart(document.getElementById("accuracyChart"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Model Accuracy (All Phases)",
+          data: acc,
+          borderColor: "#4f46e5",
+          backgroundColor: "rgba(79,70,229,0.2)",
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointColors,
+          pointRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { min: 0, max: 1, ticks: { callback: v => (v * 100).toFixed(0) + "%" } }
+        },
+        plugins: {
+          legend: { display: true },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const phase = metrics[context.dataIndex]?.phase || "UNKNOWN";
+                return `Accuracy: ${(context.parsed.y * 100).toFixed(1)}% (${phase})`;
+              }
+            }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error("Error loading metrics:", err);
+  }
+}
+setInterval(loadMetrics, 15000);
+
+
+/* ---------- PHASE BADGE ---------- */
+async function checkPhaseStatus() {
+  try {
+    const res = await fetch(`${API}/dashboard/system_phase`);
+    const data = await res.json();
+    const currentPhase = data.phase || "PHASE_2";
+    document.getElementById("phaseStatus").innerText = currentPhase.replace("PHASE_","Phase ");
+  } catch(e) {}
+}
+
+/* ---------- DETAILS SIDEBAR + NOTES ---------- */
+function showDetails(customerId){
+  const c = decisionFeedData.find(x => (x.customer_id || x.ID) === customerId);
+  if(!c) return;
+
+  currentCustomerIdForNotes = customerId;
+  document.getElementById("notesStatus").innerText = "";
+  document.getElementById("agentNotes").value = c.agent_notes || "";
+
+  document.getElementById("detailsTitle").innerText = `Details: ${customerId}`;
+
+  const container = document.getElementById("detailsContent");
+  container.innerHTML = "";
+
+  const brief = c.brief || c.demo_brief || "-";
+  const conf = Number(c.confidence || 0);
+
+  const sections = [
+    {label:"Brief", content: brief},
+    {label:"Confidence", content: `${(conf*100).toFixed(1)}%`},
+    {label:"Decision", content: c.decision ?? "-"},
+    {label:"Actions", content: (c.actions||[]).join(", ") || "-"}
+  ];
+
+  sections.forEach(sec=>{
+    const card=document.createElement("div");
+    card.className="bg-gray-50 p-4 rounded-lg shadow hover:shadow-lg transition";
+    card.innerHTML=`<p class="font-semibold mb-1">${sec.label}</p><pre class="text-sm text-gray-700 overflow-x-auto whitespace-pre-wrap">${sec.content}</pre>`;
+    container.appendChild(card);
+  });
+
+  document.getElementById("emailDraft").innerText = c.email_draft || "-";
+  document.getElementById("callScript").innerText = c.call_script || "-";
+
+  document.getElementById("detailsSidebar").classList.remove("translate-x-full");
+  document.getElementById("sidebarOverlay").classList.remove("hidden");
+}
+
+async function saveNotes(){
+  if(!currentCustomerIdForNotes) return;
+  const notes = document.getElementById("agentNotes").value || "";
+
+  try {
+    const res = await fetch(`${API}/dashboard/phase2/notes`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ customer_id: currentCustomerIdForNotes, notes })
+    });
+    const data = await res.json().catch(()=>({}));
+
+    if(res.ok && data.status === "ok"){
+      document.getElementById("notesStatus").innerText = "Saved ✓";
+      // update local cache
+      const idx = decisionFeedData.findIndex(x => (x.customer_id || x.ID) === currentCustomerIdForNotes);
+      if(idx >= 0) decisionFeedData[idx].agent_notes = notes;
+    } else {
+      document.getElementById("notesStatus").innerText = "Save failed";
+    }
+  } catch(e){
+    document.getElementById("notesStatus").innerText = "Save error";
+  }
+}
+
+document.getElementById("saveNotesBtn").addEventListener("click", saveNotes);
+
+/* ---------- CLOSE SIDEBAR ---------- */
+function closeDetails(){
+  document.getElementById("detailsSidebar").classList.add("translate-x-full");
+  document.getElementById("sidebarOverlay").classList.add("hidden");
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  document.querySelector("#detailsSidebar button").addEventListener("click",closeDetails);
+  document.getElementById("sidebarOverlay").addEventListener("click",closeDetails);
+});
+
+/* ---------- TAB SWITCHING ---------- */
+document.querySelectorAll(".tabBtn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".tabBtn").forEach(b=>{
+      b.classList.replace("border-indigo-600","border-transparent");
+      b.classList.replace("text-indigo-600","text-gray-600");
+    });
+    btn.classList.add("border-indigo-600","text-indigo-600");
+    document.querySelectorAll(".tabContent").forEach(c=>c.classList.add("hidden"));
+    document.getElementById("tab-"+btn.dataset.tab).classList.remove("hidden");
+  });
+});
+
+/* ---------- INIT ---------- */
+window.onload = async () => {
+  await loadDecisionFeed();
+  await loadMetrics();
+  await checkPhaseStatus();
+  setInterval(checkPhaseStatus, 10000);
+  setInterval(loadDecisionFeed, 10000);
+}
+</script>
+</body>
+</html>

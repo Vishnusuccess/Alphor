@@ -1,0 +1,10 @@
+*.csv
+*.joblib
+*.pkl
+*.h5
+__pycache__/
+*.env
+*.venv
+venv/
+.env/   
+*.json

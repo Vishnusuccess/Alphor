@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alphor — Customer Engagement Center</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<style>
+.modal-backdrop { background: rgba(0,0,0,0.45); }
+.modal { max-height: 90vh; overflow-y: auto; }
+.badge-no { background-color:#bbf7d0; color:#166534; }
+.badge-low { background-color:#bfdbfe; color:#1e3a8a; }
+.badge-moderate { background-color:#fed7aa; color:#c2410c; }
+.badge-high { background-color:#fecaca; color:#b91c1c; }
+tr:hover { background-color: #f9fafb; }
+@keyframes kpiPulse { 0% { transform: scale(1);} 50% { transform: scale(1.1);} 100% { transform: scale(1); } }
+.kpi-animate { animation: kpiPulse 0.5s ease; }
+.sla-breached { color: #b91c1c; font-weight: bold; }
+@keyframes flashRed { 0%,100% { background-color:#fecaca; } 50% { background-color:#f87171; } }
+.sla-flash { animation: flashRed 1s infinite; }
+</style>
+
+<body class="bg-slate-100 text-slate-900">
+
+<header class="bg-gradient-to-r from-indigo-700 to-purple-700 px-6 py-4 text-white flex justify-between items-center shadow">
+  <div>
+    <h1 class="text-3xl font-bold">Alphor - Customer Engagement Center</h1>
+    <p class="text-sm opacity-80">Phase 2 · Human-in-the-Loop Retention</p>
+  </div>
+  <div id="retrainBadge" class="hidden bg-yellow-300 text-yellow-900 px-4 py-1 rounded-full font-semibold">
+    🔁 Model Retrain Recommended
+  </div>
+</header>
+
+<section class="grid grid-cols-1 md:grid-cols-4 gap-6 p-6">
+  <div class="bg-white rounded-xl p-6 shadow text-center">
+    <p class="text-sm text-gray-500">Total Customers</p>
+    <p id="kTotal" class="text-3xl font-bold">0</p>
+  </div>
+  <div class="bg-white rounded-xl p-6 shadow text-center">
+    <p class="text-sm text-gray-500">Scheduled Calls</p>
+    <p id="kCalls" class="text-3xl font-bold text-blue-600">0</p>
+  </div>
+  <div class="bg-white rounded-xl p-6 shadow text-center">
+    <p class="text-sm text-gray-500">High Risk</p>
+    <p id="kHigh" class="text-3xl font-bold text-red-600">0</p>
+  </div>
+  <div class="bg-white rounded-xl p-6 shadow text-center">
+    <p class="text-sm text-gray-500">Avg Model Confidence</p>
+    <p id="kConf" class="text-3xl font-bold text-purple-600">0%</p>
+  </div>
+</section>
+
+<section class="px-6 pb-6">
+<div class="bg-white rounded-xl shadow overflow-auto max-h-[550px]">
+<table class="min-w-full text-sm">
+<thead class="bg-gray-50 sticky top-0">
+<tr>
+<th class="px-4 py-2 text-left">Customer</th>
+<th class="text-left">Risk</th>
+<th class="text-left">Churn</th>
+<th class="text-left">Confidence</th>
+<th class="text-left">SLA</th>
+<th class="text-left">Actions</th>
+</tr>
+</thead>
+<tbody id="table"></tbody>
+</table>
+</div>
+</section>
+
+<div id="backdrop" class="fixed inset-0 bg-black/40 hidden z-40"></div>
+<div id="modal" class="fixed inset-0 hidden z-50 flex items-center justify-center">
+<div class="bg-white w-[900px] rounded-xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
+
+<button onclick="closeModal()" class="absolute top-3 right-4 text-xl">✕</button>
+<h2 id="mTitle" class="text-2xl font-bold mb-4"></h2>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm">
+  <div class="bg-slate-100 p-3 rounded flex justify-between">
+    <span>Risk:</span> <span id="mRisk" class="font-bold"></span>
+  </div>
+  <div class="bg-slate-100 p-3 rounded flex justify-between">
+    <span>Confidence:</span> <span id="mConf" class="font-bold"></span>
+  </div>
+  <div class="bg-slate-100 p-3 rounded flex justify-between">
+    <span>SLA Remaining:</span> <span id="mSLA" class="font-bold text-red-600"></span>
+  </div>
+  <div class="bg-slate-100 p-3 rounded flex justify-between">
+    <span>Assigned Agent:</span> <span id="mAgent" class="font-bold">—</span>
+  </div>
+</div>
+
+<div class="bg-indigo-50 border border-indigo-200 p-4 rounded mb-6">
+  <h3 class="font-semibold text-indigo-800 mb-1">🧠 AI Decision Explanation</h3>
+  <p id="mExplain" class="text-sm text-indigo-900"></p>
+</div>
+
+<div class="grid grid-cols-2 gap-4">
+  <div>
+    <h3 class="font-semibold">Demo Brief</h3>
+    <pre id="mDemo" class="bg-slate-100 p-3 rounded whitespace-pre-wrap"></pre>
+  </div>
+  <div>
+    <h3 class="font-semibold">Call Script</h3>
+    <pre id="mCall" class="bg-slate-100 p-3 rounded whitespace-pre-wrap"></pre>
+  </div>
+  <div>
+    <h3 class="font-semibold">Email Draft</h3>
+    <pre id="mEmail" class="bg-slate-100 p-3 rounded whitespace-pre-wrap"></pre>
+  </div>
+  <div>
+    <h3 class="font-semibold">Agent Notes</h3>
+    <textarea id="mNotes" class="w-full h-32 border rounded p-2"></textarea>
+  </div>
+</div>
+
+<div class="flex justify-between mt-6">
+  <div class="space-x-2 flex items-center">
+    <select id="agentSelect" class="border p-2 rounded">
+      <option>Agent A</option>
+      <option>Agent B</option>
+      <option>Agent C</option>
+    </select>
+    <button onclick="assignAgent()" class="bg-indigo-600 text-white px-4 py-2 rounded">Assign</button>
+  </div>
+  <div class="space-x-2">
+    <button class="bg-green-600 text-white px-4 py-2 rounded">Mark Reviewed</button>
+    <button class="bg-purple-600 text-white px-4 py-2 rounded">Exec Drill-Down</button>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+const API="http://localhost:8000";
+let rows=[], active=null, slaTimer=null, tableInterval=null;
+const conf=c=>typeof c.confidence==="number"?c.confidence:0;
+
+// Use 2 minutes for testing instead of 2 hours
+const DEFAULT_SLA_SEC = 2 * 60 * 60; // 2 hours = 7200 seconds
+
+
+function formatSLAText(sec){
+  if(sec===null || isNaN(sec)) return "-";
+  const h=Math.floor(sec/3600);
+  const m=Math.floor((sec%3600)/60);
+  return h>0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+async function loadSupportCustomers(){
+  const res=await fetch(`${API}/dashboard/phase2/actions`);
+  rows = (await res.json()).map(c => ({
+    ...c,
+    customer_id: c.customer_id || c.ID || c.id || c.client_id || "-"
+  }));
+
+  rows.forEach(c=>{
+    if(c.sla_remaining_sec===null || isNaN(c.sla_remaining_sec)) c.sla_remaining_sec=DEFAULT_SLA_SEC;
+  });
+
+  const retrain=await fetch(`${API}/dashboard/model/retrain_status`).then(r=>r.json());
+  retrainBadge.classList.toggle("hidden", !retrain.retrain_required);
+
+  table.innerHTML="";
+  rows.forEach((c, idx)=>{
+    let badgeClass=c.risk==="NO_RISK"?"badge-no":
+                   c.risk==="LOW"?"badge-low":
+                   c.risk==="MODERATE"?"badge-moderate":"badge-high";
+
+    let slaText = c.risk === "HIGH" ? formatSLAText(c.sla_remaining_sec) : "-";
+
+    table.innerHTML+=`
+    <tr>
+      <td class="px-4 py-2 text-left">${c.customer_id}</td>
+      <td class="px-4 py-2 text-left"><span class="px-2 py-1 rounded font-semibold ${badgeClass}">${c.risk}</span></td>
+      <td class="px-4 py-2 text-left">${(c.churn_prob*100).toFixed(1)}%</td>
+      <td class="px-4 py-2 text-left">${(conf(c)*100).toFixed(1)}%</td>
+      <td class="px-4 py-2 text-left ${c.sla_breached?'sla-breached':''}">${slaText}</td>
+      <td class="px-4 py-2 text-left"><button onclick='openModal(rows[${idx}])' class="bg-indigo-600 text-white px-2 py-1 rounded">View</button></td>
+    </tr>`;
+  });
+
+  kTotal.innerText=rows.length;
+  kCalls.innerText=rows.filter(c=>c.actions.includes("schedule_call")).length;
+  kHigh.innerText=rows.filter(c=>c.risk==="HIGH").length;
+  kConf.innerText=((rows.reduce((s,c)=>s+conf(c),0)/rows.length)*100).toFixed(1)+"%";
+
+  if(tableInterval) clearInterval(tableInterval);
+  tableInterval = setInterval(updateSLATable, 1000);
+}
+
+
+function updateSLATable(){
+  rows.forEach((c, idx)=>{
+    if(c.risk==="HIGH" && c.sla_remaining_sec>0) c.sla_remaining_sec--;
+
+    const slaText = c.risk==="HIGH" ? formatSLAText(c.sla_remaining_sec) : "-";
+
+    const row = table.rows[idx];
+    if(row){
+      row.cells[4].innerText = slaText;
+      if(c.risk==="HIGH" && c.sla_remaining_sec<=0){
+        row.cells[4].classList.add("sla-breached");
+        row.classList.add("sla-flash");
+      }
+    }
+  });
+}
+
+function openModal(c){
+  active=c;
+  backdrop.classList.remove("hidden");
+  modal.classList.remove("hidden");
+
+  mTitle.innerText=`Customer ${c.customer_id}`;
+  mRisk.innerText=c.risk;
+  mConf.innerText=(conf(c)*100).toFixed(1)+"%";
+  mAgent.innerText=c.assigned_agent||"—";
+  mDemo.innerText=c.demo_brief||"-";
+  mCall.innerText=c.call_script||"-";
+  mEmail.innerText=c.email_draft||"-";
+  mNotes.value=c.agent_notes||"";
+
+  mExplain.innerText=`Prediction confidence ${(conf(c)*100).toFixed(1)}%.
+Risk classified as ${c.risk}.
+Decision based on churn probability ${(c.churn_prob*100).toFixed(1)}% and historical trends.`;
+
+  if(c.risk==="HIGH") startSLA(c.sla_remaining_sec);
+  else mSLA.innerText = "-";
+}
+
+function startSLA(sec){
+  clearInterval(slaTimer);
+  let s=sec!==null && !isNaN(sec)?sec:DEFAULT_SLA_SEC;
+  slaTimer=setInterval(()=>{
+    if(s<=0){ mSLA.innerText="0m"; clearInterval(slaTimer); return; }
+    s--;
+    const h=Math.floor(s/3600);
+    const m=Math.floor((s%3600)/60);
+    const ss=s%60;
+    mSLA.innerText=`${h}:${m.toString().padStart(2,"0")}:${ss.toString().padStart(2,"0")}`;
+  },1000);
+}
+
+async function assignAgent(){
+  if(!active) return;
+  await fetch(`${API}/dashboard/phase2/assign_agent`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({customer_id:active.customer_id,agent:agentSelect.value})
+  });
+  closeModal(); loadSupportCustomers();
+}
+
+function closeModal(){
+  clearInterval(slaTimer);
+  modal.classList.add("hidden");
+  backdrop.classList.add("hidden");
+}
+
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+backdrop.onclick=closeModal;
+window.onload=loadSupportCustomers;
+</script>
+
+</body>
+</html>
