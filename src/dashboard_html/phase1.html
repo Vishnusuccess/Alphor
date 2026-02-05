@@ -6,36 +6,30 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <style>
 @keyframes kpiPulse {
   0% { transform: scale(1); color: inherit; }
   50% { transform: scale(1.2); color: #4f46e5; }
   100% { transform: scale(1); color: inherit; }
 }
-.kpi-animate {
-  animation: kpiPulse 0.6s ease;
-}
+.kpi-animate { animation: kpiPulse 0.6s ease; }
+#detailsSidebar { transition: transform 0.3s ease; }
 </style>
 
 <body class="bg-gray-100 text-gray-800">
 
-<!-- HEADER -->
 <header class="bg-gradient-to-r from-indigo-700 to-purple-700 text-white px-6 py-5 flex justify-between items-center shadow-lg">
   <div>
     <h1 class="text-3xl font-bold">Alphor</h1>
     <p class="text-sm text-purple-200">Phase 1 — Autonomous Decision Engine</p>
   </div>
   <div class="flex items-center space-x-4">
-    <span class="bg-green-100 text-green-800 px-4 py-1 rounded-full text-sm font-semibold">
-      Autonomous Running
-    </span>
-    <span id="phaseStatus" class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
-      Phase 1
-    </span>
+    <span class="bg-green-100 text-green-800 px-4 py-1 rounded-full text-sm font-semibold">Autonomous Running</span>
+    <span id="phaseStatus" class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">Phase 1</span>
   </div>
 </header>
 
-<!-- PHASE 2 TRANSITION -->
 <section id="phase2Transition" class="hidden mx-6 mt-4">
   <div class="bg-green-50 border border-green-200 p-4 rounded-xl flex items-center justify-between">
     <p class="text-green-800 font-semibold">✅ Phase 2 Ready (Autonomous Mode)</p>
@@ -43,7 +37,6 @@
   </div>
 </section>
 
-<!-- KPIs -->
 <section class="grid grid-cols-1 md:grid-cols-6 gap-6 p-6">
   <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
     <p class="text-sm text-gray-500">Total Actions</p>
@@ -76,7 +69,6 @@
   </div>
 </section>
 
-<!-- CHARTS -->
 <section class="grid grid-cols-1 md:grid-cols-2 gap-6 px-6 pb-6">
   <div class="bg-white p-6 rounded-xl shadow">
     <h2 class="text-lg font-semibold mb-3">Model Accuracy Over Time</h2>
@@ -89,13 +81,12 @@
   </div>
 </section>
 
-<!-- ACTION TABLE -->
 <section class="p-6">
   <div class="bg-white rounded-xl shadow">
-    <div class="max-h-[420px] overflow-y-auto">
+    <div id="feedScroll" class="max-h-[420px] overflow-y-auto">
       <table class="min-w-full text-sm">
         <thead class="bg-gray-50 sticky top-0">
-        <tr>
+          <tr>
             <th class="px-3 py-1.5">Customer</th>
             <th class="px-3 py-1.5">Risk</th>
             <th class="px-3 py-1.5">Churn %</th>
@@ -108,11 +99,14 @@
             <th class="px-3 py-1.5">Human Override</th>
             <th class="px-3 py-1.5">Executed Action Correct</th>
             <th class="px-3 py-1.5">Details</th>
-        </tr>
+          </tr>
         </thead>
-
         <tbody id="actionsTable"></tbody>
       </table>
+
+      <div id="loadingMoreIndicator" class="text-center text-sm text-gray-500 py-2 hidden">
+        Loading more actions...
+      </div>
     </div>
 
     <div class="p-4 flex justify-end">
@@ -123,7 +117,7 @@
 </section>
 
 <!-- DETAILS SIDEBAR -->
-<div id="detailsSidebar" class="fixed top-0 right-0 h-full w-96 bg-white shadow-xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
+<div id="detailsSidebar" class="fixed top-0 right-0 h-full w-96 bg-white shadow-xl transform translate-x-full z-50 overflow-y-auto">
   <div class="p-4 border-b flex justify-between items-center">
     <h2 id="detailsTitle" class="text-xl font-bold">Customer Details</h2>
     <button class="text-gray-500 hover:text-gray-700">&times;</button>
@@ -132,44 +126,40 @@
   <div class="flex border-b">
     <button class="tabBtn px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600" data-tab="overview">Overview</button>
     <button class="tabBtn px-4 py-2 font-semibold text-gray-600" data-tab="communications">Communications</button>
-    <button class="tabBtn px-4 py-2 font-semibold text-gray-600" data-tab="schedule">Schedule</button>
-    <button class="tabBtn px-4 py-2 font-semibold text-gray-600" data-tab="feedback">Feedback</button>
   </div>
 
   <div class="p-4 space-y-4">
     <div id="tab-overview" class="tabContent">
-      <div id="overviewAlert"></div>
       <div id="detailsContent" class="space-y-4"></div>
     </div>
 
     <div id="tab-communications" class="tabContent hidden">
-      <div id="commContent" class="space-y-4">
-        <div>
-          <p class="font-semibold">Email Draft:</p>
-          <pre id="emailDraft" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
-        </div>
-        <div>
-          <p class="font-semibold mt-4">Call Script:</p>
-          <pre id="callScript" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
-        </div>
+      <div>
+        <p class="font-semibold">Email Draft:</p>
+        <pre id="emailDraft" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
       </div>
-    </div>
-
-    <div id="tab-schedule" class="tabContent hidden">
-      <ul id="scheduleList" class="space-y-2 text-sm text-gray-700"></ul>
-    </div>
-
-    <div id="tab-feedback" class="tabContent hidden">
-      <p id="confidence"></p>
+      <div>
+        <p class="font-semibold mt-4">Call Script:</p>
+        <pre id="callScript" class="bg-gray-100 p-2 rounded overflow-x-auto whitespace-pre-wrap"></pre>
+      </div>
     </div>
   </div>
 </div>
+
 <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-20 hidden z-40"></div>
 
 <script>
 const API_BASE = "http://localhost:8000";
-const allPossibleActions = ["send_email", "offer_discount", "schedule_call"];
+
 let accuracyChart, accuracyDeltaChart, overrideChart;
+
+// paging state
+let skip = 0;
+const PAGE_SIZE = 200;
+let loadingMore = false;
+let reachedEnd = false;
+
+// store loaded rows for sidebar lookup
 let actionsData = [];
 
 /* ---------- RISK LABEL ---------- */
@@ -180,12 +170,11 @@ function riskLabel(churnProb) {
   return { label: "HIGH", color: "bg-red-100 text-red-700" };
 }
 
-/* ---------- METRICS ---------- */
+/* ---------- METRICS CHARTS ---------- */
 async function loadMetrics() {
   try {
     const res = await fetch(`${API_BASE}/dashboard/metrics`);
     const metrics = await res.json();
-
     if (!metrics || metrics.length === 0) return;
 
     const labels = metrics.map(m => m.trained_at ? new Date(m.trained_at).toLocaleString() : "Unknown");
@@ -225,187 +214,173 @@ async function loadMetrics() {
   }
 }
 
-/* ---------- KPIs ---------- */
-function animateKPI(element) {
-  element.classList.remove("kpi-animate");
-  void element.offsetWidth;
-  element.classList.add("kpi-animate");
+/* ---------- KPIs FROM SUMMARY (ALL ACTIONS) ---------- */
+function animateKPI(el){ el.classList.remove("kpi-animate"); void el.offsetWidth; el.classList.add("kpi-animate"); }
+
+async function loadPhase1Summary(){
+  try{
+    const res = await fetch(`${API_BASE}/dashboard/phase1/summary`);
+    if(!res.ok) return;
+    const s = await res.json();
+
+    totalActions.innerText = s.total ?? 0; animateKPI(totalActions);
+    humanReview.innerText = s.human_review ?? 0; animateKPI(humanReview);
+    totalDiscount.innerText = "$" + Number(s.total_discount || 0).toFixed(0); animateKPI(totalDiscount);
+    autoEmails.innerText = s.auto_emails ?? 0; animateKPI(autoEmails);
+    autoDiscounts.innerText = s.discounts_offered ?? 0; animateKPI(autoDiscounts);
+
+  } catch(e){
+    console.error("summary error", e);
+  }
 }
 
-function updateKPIs() {
-  totalActions.innerText = actionsData.length;
-  animateKPI(totalActions);
-
-  humanReview.innerText = actionsData.filter(a=>a.human_review_required).length;
-  animateKPI(humanReview);
-
-  totalDiscount.innerText = "$" + actionsData.reduce((s,a)=>s+(a.discount||0),0);
-  animateKPI(totalDiscount);
-
-  autoEmails.innerText = actionsData.filter(a=>(a.actions||[]).includes("send_email")).length;
-  animateKPI(autoEmails);
-
-  autoDiscounts.innerText = actionsData.filter(a=>(a.actions||[]).includes("offer_discount")).length;
-  animateKPI(autoDiscounts);
+/* ---------- ACTION TABLE (PAGINATED) ---------- */
+function yesNoDropdown(customerId, field) {
+  return `<select class="feedback-select border rounded px-1 py-0.5 text-sm" data-id="${customerId}" data-field="${field}">
+    <option value="">Select</option>
+    <option value="1">Yes</option>
+    <option value="0">No</option>
+  </select>`;
 }
 
-/* ---------- ACTIONS ---------- */
-async function loadActions() {
-  try {
-    const res = await fetch(`${API_BASE}/dashboard/actions`);
-    const actions = await res.json();
-    actionsData = actions || [];
+async function loadActions(reset=false){
+  if (loadingMore) return;
+  if (!reset && reachedEnd) return;
+  loadingMore = true;
+
+  const indicator = document.getElementById("loadingMoreIndicator");
+  if (indicator) { indicator.innerText="Loading more actions..."; indicator.classList.remove("hidden"); }
+
+  try{
+    if(reset){
+      skip = 0;
+      reachedEnd = false;
+      actionsData = [];
+      document.getElementById("actionsTable").innerHTML = "";
+    }
+
+    const res = await fetch(`${API_BASE}/dashboard/phase1/actions?skip=${skip}&limit=${PAGE_SIZE}`);
+    if(!res.ok){
+      if(indicator){ indicator.innerText="⚠ Failed to load"; }
+      return;
+    }
+
+    const newRows = await res.json();
+    if(!Array.isArray(newRows)){
+      if(indicator){ indicator.innerText="⚠ Bad server response"; }
+      return;
+    }
+
+    if(newRows.length === 0){
+      reachedEnd = true;
+      if(indicator){ indicator.innerText="✅ All actions loaded"; }
+      return;
+    }
+
+    actionsData = actionsData.concat(newRows);
 
     const tbody = document.getElementById("actionsTable");
-    tbody.innerHTML = "";
-
-    actionsData.forEach(a => {
-      // ✅ show CUSTOMER ID from DB (ID), not Mongo _id
-      const customerId = a.ID || a.customer_id || a.client_id || a._id;
-      const customerName = a.customer_name || a.name || customerId;
-
-      // ✅ use your DB/backend field name
-      const churnProb = typeof a.churn_prob === "number" ? a.churn_prob : 0;
-
+    newRows.forEach(a=>{
+      const customerId = a.ID || a.customer_id || a._id || "-";
+      const churnProb = Number(a.churn_prob || 0);
       const risk = riskLabel(churnProb);
-      const tr = document.createElement("tr");
 
-      function yesNoDropdown(field, value) {
-        return `<select class="feedback-select border rounded px-1 py-0.5 text-sm" data-id="${customerId}" data-field="${field}">
-          <option value="">Select</option>
-          <option value="1" ${value===true||value===1?"selected":""}>Yes</option>
-          <option value="0" ${value===false||value===0?"selected":""}>No</option>
-        </select>`;
-      }
+      const tr = document.createElement("tr");
+      tr.className = "border-t hover:bg-gray-50 transition";
 
       tr.innerHTML = `
-        <td class="px-3 py-1.5 font-semibold">${customerName}</td>
+        <td class="px-3 py-1.5 font-semibold">${customerId}</td>
         <td class="px-3 py-1.5"><span class="${risk.color} px-2 py-1 rounded">${risk.label}</span></td>
         <td class="px-3 py-1.5">${(churnProb*100).toFixed(1)}%</td>
         <td class="px-3 py-1.5">${a.decision || "-"}</td>
         <td class="px-3 py-1.5">${(a.actions||[]).join(", ") || "-"}</td>
         <td class="px-3 py-1.5">${a.discount ? "$"+a.discount : "-"}</td>
 
-        <!-- ✅ Collect churn feedback (required by Phase1FeedbackItem) -->
-        <td class="px-3 py-1.5">${yesNoDropdown("churn", a.churn)}</td>
+        <td class="px-3 py-1.5">${yesNoDropdown(customerId,"churn")}</td>
+        <td class="px-3 py-1.5">${yesNoDropdown(customerId,"decision_correct")}</td>
+        <td class="px-3 py-1.5">${yesNoDropdown(customerId,"action_appropriate")}</td>
+        <td class="px-3 py-1.5">${yesNoDropdown(customerId,"human_override")}</td>
+        <td class="px-3 py-1.5">${yesNoDropdown(customerId,"executed_action_correct")}</td>
 
-        <td class="px-3 py-1.5">${yesNoDropdown("decision_correct", a.decision_correct)}</td>
-        <td class="px-3 py-1.5">${yesNoDropdown("action_appropriate", a.action_appropriate)}</td>
-        <td class="px-3 py-1.5">${yesNoDropdown("human_override", a.human_override)}</td>
-        <td class="px-3 py-1.5">${yesNoDropdown("executed_action_correct", a.executed_action_correct)}</td>
-        <td class="px-3 py-1.5"><button class="text-indigo-600 font-semibold" onclick="showDetails('${customerId}')">View</button></td>
+        <td class="px-3 py-1.5">
+          <button class="text-indigo-600 font-semibold">View</button>
+        </td>
       `;
+
+      tr.querySelector("button").addEventListener("click",()=>showDetails(customerId));
       tbody.appendChild(tr);
     });
 
-    updateKPIs();
+    skip += newRows.length;
 
-  } catch(err) {
-    console.error("Error loading actions:", err);
+    if(indicator) indicator.classList.add("hidden");
+  } catch(e){
+    console.error("loadActions error:", e);
+    if(indicator){ indicator.innerText="⚠ Error loading"; }
+  } finally {
+    loadingMore = false;
   }
 }
 
-/* ---------- FEEDBACK ---------- */
+/* ---------- FEEDBACK (FIXED URL) ---------- */
 submitFeedbackBtn.onclick = async () => {
-    const feedback = [];
+  const feedback = [];
 
-    // --- Dropdown feedback ---
-    document.querySelectorAll(".feedback-select").forEach(el => {
-        if (el.value === "") return;
+  document.querySelectorAll(".feedback-select").forEach(el => {
+    if (el.value === "") return;
 
-        let row = feedback.find(f => f.ID === el.dataset.id);
-        if (!row) {
-            row = { ID: el.dataset.id, churn: null, executed_action: [] };
-            feedback.push(row);
-        }
-        row[el.dataset.field] = parseInt(el.value);
-    });
-
-    // --- Executed actions (MANDATORY for Phase 1 learning) ---
-    document.querySelectorAll(".feedback-checkbox").forEach(cb => {
-        let row = feedback.find(f => f.ID === cb.dataset.id);
-        if (!row) {
-            row = { ID: cb.dataset.id, churn: null, executed_action: [] };
-            feedback.push(row);
-        }
-
-        if (cb.checked && !row.executed_action.includes(cb.value)) {
-            row.executed_action.push(cb.value);
-        }
-    });
-
-    // 🚨 Enforce executed_action presence
-    feedback.forEach(row => {
-        if (!Array.isArray(row.executed_action)) {
-            row.executed_action = [];
-        }
-    });
-
-    if (feedback.length === 0) {
-        alert("Please provide feedback before submitting.");
-        return;
+    let row = feedback.find(f => f.ID === el.dataset.id);
+    if (!row) {
+      row = { ID: el.dataset.id, churn: null, executed_action: [] };
+      feedback.push(row);
     }
+    row[el.dataset.field] = parseInt(el.value);
+  });
 
-    const res = await fetch(`${API_BASE}/feedback/phase1`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(feedback)
-    });
+  // IMPORTANT: your backend requires executed_action; keep empty array if none selected
+  feedback.forEach(r => {
+    if (!Array.isArray(r.executed_action)) r.executed_action = [];
+  });
 
-    if (res.ok) {
-        feedbackStatus.innerText = "✅ Phase 1 feedback submitted!";
-        await loadMetrics();
-        await loadActions();
-    } else {
-        feedbackStatus.innerText = "❌ Feedback submission failed";
-    }
+  if (feedback.length === 0) {
+    alert("Please provide feedback before submitting.");
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/phase_1/feedback`, {   // ✅ FIXED
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(feedback)
+  });
+
+  if (res.ok) {
+    feedbackStatus.innerText = "✅ Phase 1 feedback submitted!";
+    await loadMetrics();
+    await loadPhase1Summary();
+  } else {
+    feedbackStatus.innerText = "❌ Feedback submission failed";
+  }
 };
-
 
 /* ---------- DETAILS SIDEBAR ---------- */
 function showDetails(customerId){
-  const customer = actionsData.find(c => (c.ID || c.customer_id || c.client_id || c._id) === customerId);
+  const customer = actionsData.find(c => (c.ID || c.customer_id) === customerId);
   if(!customer) return;
 
-  document.getElementById("detailsTitle").innerText=`Details: ${customerId}`;
-  const overviewAlert = document.getElementById("overviewAlert");
-  overviewAlert.innerHTML="";
-
-  if(customer.risk==="HIGH" || (customer.actions||[]).includes("schedule_call")){
-    const alertCard = document.createElement("div");
-    alertCard.className="bg-red-50 p-4 rounded-lg shadow border-l-4 border-red-600 animate-pulse";
-    alertCard.innerHTML=`
-      <p class="font-semibold text-red-600 mb-1">⚠ Call Escalated</p>
-      <p class="text-sm">Assigned to: ${customer.assigned_team||"Support Team"}</p>
-      <p class="text-sm">Reason: ${customer.escalation_reason||"High Risk / Action Required"}</p>
-      <p class="text-sm">Scheduled at: ${customer.scheduled_time||"Pending"}</p>
-    `;
-    overviewAlert.appendChild(alertCard);
-  }
+  document.getElementById("detailsTitle").innerText = `Details: ${customerId}`;
 
   const container = document.getElementById("detailsContent");
-  container.innerHTML="";
-  [
-    {label:"Demo Brief", value:customer.demo_brief||"-"},
-    {label:"Confidence", value:customer.confidence!==undefined ? (customer.confidence*100).toFixed(1)+"%" : "-"}
-  ].forEach(item=>{
-    const card = document.createElement("div");
-    card.className="bg-gray-50 p-4 rounded-lg shadow";
-    card.innerHTML=`<p class="font-semibold mb-1">${item.label}</p><pre class="text-sm whitespace-pre-wrap">${item.value}</pre>`;
-    container.appendChild(card);
-  });
+  container.innerHTML = "";
 
-  document.getElementById("emailDraft").innerText=customer.email_draft||"-";
-  document.getElementById("callScript").innerText=customer.call_script||"-";
+  const brief = customer.brief || customer.demo_brief || "-";
 
-  const schedule=document.getElementById("scheduleList");
-  schedule.innerHTML="";
-  if((customer.actions||[]).includes("schedule_call")){
-    const li=document.createElement("li");
-    li.className="text-red-600 font-semibold";
-    li.innerText=`Escalated call → Assigned: ${customer.assigned_team||"Support Team"}, Scheduled: ${customer.scheduled_time||"Pending"}`;
-    schedule.appendChild(li);
-  }
+  const card = document.createElement("div");
+  card.className="bg-gray-50 p-4 rounded-lg shadow";
+  card.innerHTML = `<p class="font-semibold mb-1">Brief</p><pre class="text-sm whitespace-pre-wrap">${brief}</pre>`;
+  container.appendChild(card);
+
+  document.getElementById("emailDraft").innerText = customer.email_draft || "-";
+  document.getElementById("callScript").innerText = customer.call_script || "-";
 
   document.getElementById("detailsSidebar").classList.remove("translate-x-full");
   document.getElementById("sidebarOverlay").classList.remove("hidden");
@@ -415,26 +390,12 @@ function closeDetails(){
   document.getElementById("detailsSidebar").classList.add("translate-x-full");
   document.getElementById("sidebarOverlay").classList.add("hidden");
 }
-
 document.addEventListener("DOMContentLoaded",()=>{
   document.querySelector("#detailsSidebar button").addEventListener("click",closeDetails);
   document.getElementById("sidebarOverlay").addEventListener("click",closeDetails);
 });
 
-/* ---------- TAB SWITCHING ---------- */
-document.querySelectorAll(".tabBtn").forEach(btn=>{
-  btn.addEventListener("click",()=>{
-    document.querySelectorAll(".tabBtn").forEach(b=>{
-      b.classList.replace("border-indigo-600","border-transparent");
-      b.classList.replace("text-indigo-600","text-gray-600");
-    });
-    btn.classList.add("border-indigo-600","text-indigo-600");
-    document.querySelectorAll(".tabContent").forEach(c=>c.classList.add("hidden"));
-    document.getElementById("tab-"+btn.dataset.tab).classList.remove("hidden");
-  });
-});
-
-/* ---------- PHASE 2 TRANSITION ---------- */
+/* ---------- PHASE STATUS ---------- */
 async function checkPhaseStatus() {
   const res = await fetch(`${API_BASE}/dashboard/system_phase`);
   const data = await res.json();
@@ -442,9 +403,6 @@ async function checkPhaseStatus() {
   const currentPhase = data.phase || "PHASE_1";
   document.getElementById("phaseStatus").innerText = currentPhase.replace("PHASE_","Phase ");
 
-  // ✅ Show Phase 2 button when:
-  // - already in PHASE_2, OR
-  // - still in PHASE_1 but awaiting_feedback is false (meaning Phase 1 complete / ready)
   const readyForPhase2 =
     currentPhase === "PHASE_2" ||
     (currentPhase === "PHASE_1" && data.awaiting_feedback === false);
@@ -456,8 +414,6 @@ async function checkPhaseStatus() {
   }
 }
 
-
-/* ---------- GO TO PHASE 2 DASHBOARD ---------- */
 function goToPhase2(){
   fetch(`${API_BASE}/dashboard/system_phase`, {
     method:"POST",
@@ -467,19 +423,40 @@ function goToPhase2(){
   .then(res=>res.json())
   .then(data=>{
     if(data.status==="ok"){
-      alert("Switched to Phase 2! You can now open the Phase 2 Dashboard.");
       window.location.href="/dashboard_static/phase2.html";
     }
   });
 }
 
 /* ---------- INIT ---------- */
-window.onload = async ()=>{
+document.addEventListener("DOMContentLoaded", async ()=>{
   await loadMetrics();
-  await loadActions();
+  await loadPhase1Summary();
+  await loadActions(true);
   await checkPhaseStatus();
-  setInterval(checkPhaseStatus,10000);
-};
+
+  // infinite scroll
+  const scroller = document.getElementById("feedScroll");
+  if(scroller){
+    scroller.addEventListener("scroll", async ()=>{
+      const nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 80;
+      if(nearBottom) await loadActions(false);
+    });
+  }
+
+  // refresh summary + phase badge (fast)
+  setInterval(checkPhaseStatus, 10000);
+  setInterval(loadPhase1Summary, 10000);
+
+  // refresh first page only if user is at top (avoid breaking scroll)
+  setInterval(async ()=>{
+    const scroller = document.getElementById("feedScroll");
+    if(scroller && scroller.scrollTop < 10){
+      await loadActions(true);
+    }
+  }, 15000);
+});
 </script>
+
 </body>
 </html>

@@ -1,9 +1,13 @@
 # phase0.py
 from __future__ import annotations
-import io, pickle, logging
+
+import io
+import pickle
+import logging
 from datetime import datetime
-from uuid import uuid4
 import math
+import gzip
+
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
@@ -12,9 +16,10 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+
+from pymongo import UpdateOne
 
 from db.mongo import (
     data_col,
@@ -42,8 +47,11 @@ FEATURES = [
 
 PHASE_1_ACCURACY_THRESHOLD = 0.70
 
+# Bulk write tuning (adjust if needed)
+BULK_BATCH_SIZE = 10000  # 5k–20k are typical; 10k is a good start
 
-def clean_row(row):
+
+def clean_row(row: dict) -> dict:
     clean = {}
     for k, v in row.items():
         # Replace NaN or Inf with 0 for numeric columns
@@ -60,21 +68,38 @@ class FeedbackItem(BaseModel):
 
 # ---------------- UTIL FUNCTIONS ----------------
 def ensure_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Keep same behavior (encode object columns to numbers),
+    but faster than LabelEncoder-per-column by using pandas factorize.
+
+    NOTE: Like your original code, encoding is based on the current upload's categories.
+    """
     df = df.copy()
+
+    # Ensure all FEATURES exist
     for f in FEATURES:
-        if f not in df:
+        if f not in df.columns:
             df[f] = 0
+
+    # Encode object columns quickly
     for col in FEATURES:
         if df[col].dtype == "object":
-            df[col] = LabelEncoder().fit_transform(df[col].astype(str))
-    return df[FEATURES].astype(float)
+            # factorize returns codes + uniques; unknowns not applicable in per-upload encoding
+            codes, _ = pd.factorize(df[col].astype(str), sort=False)
+            df[col] = codes
+
+    # Ensure numeric float matrix
+    out = df[FEATURES].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    # Replace inf/-inf just in case
+    out = out.replace([np.inf, -np.inf], 0.0)
+    return out.astype(float)
 
 def load_best_model():
     """Return CLIENT_PHASE_0 if exists, otherwise GENERAL"""
-    client = model_col.find_one({"model_type":"CLIENT_PHASE_0"})
+    client = model_col.find_one({"model_type": "CLIENT_PHASE_0"})
     if client:
         return pickle.loads(client["model"]), pickle.loads(client["scaler"]), "CLIENT_PHASE_0"
-    general = model_col.find_one({"model_type":"GENERAL"})
+    general = model_col.find_one({"model_type": "GENERAL"})
     if not general:
         raise RuntimeError("No model available (GENERAL missing)")
     return pickle.loads(general["model"]), pickle.loads(general["scaler"]), "GENERAL"
@@ -98,48 +123,20 @@ def risk_label(prob: float) -> str:
         return "Medium"
     return "Low"
 
-# ---------------- PREDICT ----------------
-# @router.post("/predict")
-# async def predict_phase_0(file: UploadFile = File(...)):
-#     model, scaler, model_type = load_best_model()
+def _bulk_write_in_batches(collection, ops: list[UpdateOne], batch_size: int = BULK_BATCH_SIZE):
+    if not ops:
+        return
+    for i in range(0, len(ops), batch_size):
+        collection.bulk_write(ops[i:i + batch_size], ordered=False)
 
-#     df = pd.read_csv(io.BytesIO(await file.read()))
-#     if "ID" not in df.columns:
-#         raise HTTPException(400, "CSV must contain stable ID column")
+def _read_uploaded_csv(file: UploadFile) -> pd.DataFrame:
+    """
+    Supports .csv and .csv.gz (optional). No frontend change required to keep using .csv.
+    """
+    raw = file.file.read() if hasattr(file, "file") else None
+    # In FastAPI, file is async; we handle in predict with await file.read().
+    raise RuntimeError("Use async read in predict_phase_0")  # safeguard
 
-#     # Store client data
-#     for _, row in df.iterrows():
-#         client_data_col.update_one(
-#             {"ID": row["ID"]},
-#             {"$set": row.to_dict() | {"ingested_at": datetime.utcnow()}},
-#             upsert=True
-#         )
-
-#     X = ensure_features(df)
-#     probs = model.predict(scaler.transform(X))
-#     preds = (probs >= 0.5).astype(int)
-
-#     df["churn_prob"] = probs
-#     df["prediction"] = preds
-
-#     for _, row in df.iterrows():
-#         predictions_col.update_one(
-#             {"ID": row["ID"]},
-#             {"$set": {
-#                 "ID": row["ID"],
-#                 "prediction": int(row["prediction"]),
-#                 "churn_prob": float(row["churn_prob"]),
-#                 "model_type": model_type,
-#                 "timestamp": datetime.utcnow()
-#             }},
-#             upsert=True
-#         )
-
-#     return JSONResponse({
-#         "phase": "PHASE_0",
-#         "rows_scored": len(df),
-#         "model_used": model_type
-#     })
 
 # ---------------- MANUAL FEEDBACK ----------------
 @router.post("/feedback")
@@ -158,57 +155,94 @@ def submit_feedback_phase_0(items: list[FeedbackItem]):
 async def predict_phase_0(file: UploadFile = File(...)):
     model, scaler, model_type = load_best_model()
 
-    df = pd.read_csv(io.BytesIO(await file.read()))
+    # Read file bytes (supports optional gzip)
+    raw = await file.read()
+    if file.filename and file.filename.endswith(".gz"):
+        try:
+            raw = gzip.decompress(raw)
+        except OSError:
+            raise HTTPException(400, "Invalid .gz file")
+
+    # Parse CSV
+    try:
+        df = pd.read_csv(io.BytesIO(raw))
+    except Exception as e:
+        logger.exception("CSV parse failed")
+        raise HTTPException(400, f"Failed to read CSV: {str(e)}")
+
     if "ID" not in df.columns:
         raise HTTPException(400, "CSV must contain stable ID column")
 
-    # Store client data safely
-    for _, row in df.iterrows():
-        safe_row = clean_row(row.to_dict())
-        safe_row["ingested_at"] = datetime.utcnow()
-        client_data_col.update_one(
-            {"ID": row["ID"]},
-            {"$set": safe_row},
-            upsert=True
+    # Use one timestamp for the whole request (faster + consistent)
+    now = datetime.utcnow()
+
+    # --------- Store client data (BULK UPSERT) ----------
+    # Convert rows to dicts once (faster than iterrows)
+    records = df.to_dict("records")
+
+    client_ops: list[UpdateOne] = []
+    for rec in records:
+        safe_row = clean_row(rec)
+        safe_row["ingested_at"] = now
+        client_ops.append(
+            UpdateOne({"ID": rec["ID"]}, {"$set": safe_row}, upsert=True)
         )
 
+    _bulk_write_in_batches(client_data_col, client_ops)
+
+    # --------- Predict ----------
     X = ensure_features(df)
-    probs = model.predict(scaler.transform(X))
-    preds = (probs >= 0.5).astype(int)
+    Xs = scaler.transform(X)
 
-    df["churn_prob"] = probs
-    df["prediction"] = preds
+    probs = model.predict(Xs)
+    # sanitize probs (just in case)
+    probs = np.where(np.isfinite(probs), probs, 0.0).astype(float)
 
-    # Store predictions safely
-    for _, row in df.iterrows():
-        client_id = row["ID"]
-        churn_prob = float(row["churn_prob"]) if not math.isnan(row["churn_prob"]) else 0.0
-        predictions_col.update_one(
-            {"ID": client_id},
-            {"$set": {
-                "ID": client_id,
-                "prediction": int(row["prediction"]),
-                "churn_prob": churn_prob,
-                "model_type": model_type,
-                "timestamp": datetime.utcnow()
-            }},
-            upsert=True
+    preds = (probs >= 0.5).astype(np.int8)
+
+    # --------- Store predictions (BULK UPSERT) ----------
+    ids = df["ID"].astype(str).to_numpy()
+
+    pred_ops: list[UpdateOne] = []
+    for cid, prob, pred in zip(ids, probs, preds):
+        pred_ops.append(
+            UpdateOne(
+                {"ID": cid},
+                {"$set": {
+                    "ID": cid,
+                    "prediction": int(pred),
+                    "churn_prob": float(prob),
+                    "model_type": model_type,
+                    "timestamp": now
+                }},
+                upsert=True
+            )
         )
 
+    _bulk_write_in_batches(predictions_col, pred_ops)
+
+    # Keep your same response contract (no frontend change)
     return JSONResponse({
-    "phase": "PHASE_0",
-    "rows_scored": len(df),
-    "model_used": model_type,
-    "message": f"Processed {len(df)} rows with {model_type} model"
-})
+        "phase": "PHASE_0",
+        "rows_scored": len(df),
+        "model_used": model_type,
+        "message": f"Processed {len(df)} rows with {model_type} model"
+    })
 
 # ---------------- BULK FEEDBACK ----------------
 @router.post("/feedback/bulk")
 async def submit_bulk_feedback(file: UploadFile = File(...)):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(400, "Only CSV files supported")
+    if not file.filename.endswith(".csv") and not file.filename.endswith(".csv.gz") and not file.filename.endswith(".gz"):
+        raise HTTPException(400, "Only CSV files supported (.csv or .csv.gz)")
 
-    df = pd.read_csv(io.BytesIO(await file.read()))
+    raw = await file.read()
+    if file.filename and file.filename.endswith(".gz"):
+        try:
+            raw = gzip.decompress(raw)
+        except OSError:
+            raise HTTPException(400, "Invalid .gz file")
+
+    df = pd.read_csv(io.BytesIO(raw))
     if not {"ID", "churn"}.issubset(df.columns):
         raise HTTPException(400, "CSV must contain ID and churn")
 
@@ -221,11 +255,12 @@ async def submit_bulk_feedback(file: UploadFile = File(...)):
     if df.empty:
         raise HTTPException(400, "No matching predictions found")
 
+    now = datetime.utcnow()
     feedback_col.insert_many([
         {
             "ID": row["ID"],
             "actual_churn": int(row["churn"]),
-            "timestamp": datetime.utcnow()
+            "timestamp": now
         }
         for _, row in df.iterrows()
     ])

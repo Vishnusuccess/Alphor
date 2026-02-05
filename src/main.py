@@ -41,7 +41,13 @@ app.mount("/dashboard_static", StaticFiles(directory=static_dir), name="dashboar
 # ---------------- INCLUDE ROUTERS ----------------
 app.include_router(pre_phase_0_router, prefix="/pre_phase_0", tags=["PRE_PHASE_0"])
 app.include_router(phase_0_router, prefix="/phase_0", tags=["PHASE_0"])
+
+# Phase 1 routes:
+# - keep existing /phase_1/... routes
 app.include_router(phase_1_router, prefix="/phase_1", tags=["PHASE_1"])
+# - add alias routes at root so frontend calling /feedback works
+app.include_router(phase_1_router, prefix="", tags=["PHASE_1_ALIAS"])
+
 app.include_router(phase_2_router, prefix="/phase_2", tags=["PHASE_2"])
 
 app.include_router(dashboard_router, prefix="/dashboard")       # Phase 1 Dashboard APIs
@@ -49,6 +55,7 @@ app.include_router(phase2_actions_router, prefix="/dashboard")  # Phase 2 Dashbo
 app.include_router(system_router)
 app.include_router(phase2_enterprise_router)
 app.include_router(retrain_router)
+
 # ---------------- ROOT ----------------
 @app.get("/")
 def root():

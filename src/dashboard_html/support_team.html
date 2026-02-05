@@ -17,8 +17,8 @@ tr:hover { background-color: #f9fafb; }
 @keyframes kpiPulse { 0% { transform: scale(1);} 50% { transform: scale(1.1);} 100% { transform: scale(1); } }
 .kpi-animate { animation: kpiPulse 0.5s ease; }
 .sla-breached { color: #b91c1c; font-weight: bold; }
-@keyframes flashRed { 0%,100% { background-color:#fecaca; } 50% { background-color:#f87171; } }
-.sla-flash { animation: flashRed 1s infinite; }
+/* @keyframes flashRed { 0%,100% { background-color:#fecaca; } 50% { background-color:#f87171; } }
+.sla-flash { animation: flashRed 1s infinite; } */
 </style>
 
 <body class="bg-slate-100 text-slate-900">
@@ -53,7 +53,7 @@ tr:hover { background-color: #f9fafb; }
 </section>
 
 <section class="px-6 pb-6">
-<div class="bg-white rounded-xl shadow overflow-auto max-h-[550px]">
+<div id="supportScroll" class="bg-white rounded-xl shadow overflow-auto max-h-[550px]">
 <table class="min-w-full text-sm">
 <thead class="bg-gray-50 sticky top-0">
 <tr>
@@ -67,6 +67,10 @@ tr:hover { background-color: #f9fafb; }
 </thead>
 <tbody id="table"></tbody>
 </table>
+  <div id="loadingMoreIndicator" class="text-center text-sm text-gray-500 py-2 hidden">
+    Loading more customers...
+  </div>
+
 </div>
 </section>
 
@@ -136,107 +140,196 @@ tr:hover { background-color: #f9fafb; }
 
 <script>
 const API="http://localhost:8000";
-let rows=[], active=null, slaTimer=null, tableInterval=null;
-const conf=c=>typeof c.confidence==="number"?c.confidence:0;
 
-// Use 2 minutes for testing instead of 2 hours
-const DEFAULT_SLA_SEC = 2 * 60 * 60; // 2 hours = 7200 seconds
+let rows = [];
+let active = null;
+let slaTimer = null;
+let tableInterval = null;
 
+let skip = 0;
+const PAGE_SIZE = 200;
+let loadingMore = false;
+let reachedEnd = false;
+
+const conf = c => typeof c.confidence === "number" ? c.confidence : 0;
 
 function formatSLAText(sec){
-  if(sec===null || isNaN(sec)) return "-";
-  const h=Math.floor(sec/3600);
-  const m=Math.floor((sec%3600)/60);
-  return h>0 ? `${h}h ${m}m` : `${m}m`;
+  if(sec === null || sec === undefined || isNaN(sec)) return "-";
+  sec = Math.max(0, Math.floor(sec));
+
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+
+  // 1:59:07 format
+  return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-async function loadSupportCustomers(){
-  const res=await fetch(`${API}/dashboard/phase2/actions`);
-  rows = (await res.json()).map(c => ({
-    ...c,
-    customer_id: c.customer_id || c.ID || c.id || c.client_id || "-"
-  }));
 
-  rows.forEach(c=>{
-    if(c.sla_remaining_sec===null || isNaN(c.sla_remaining_sec)) c.sla_remaining_sec=DEFAULT_SLA_SEC;
-  });
+async function loadSupportSummary(){
+  try{
+    const res = await fetch(`${API}/dashboard/phase2/support/summary`);
+    if(!res.ok) return;
+    const s = await res.json();
 
-  const retrain=await fetch(`${API}/dashboard/model/retrain_status`).then(r=>r.json());
-  retrainBadge.classList.toggle("hidden", !retrain.retrain_required);
-
-  table.innerHTML="";
-  rows.forEach((c, idx)=>{
-    let badgeClass=c.risk==="NO_RISK"?"badge-no":
-                   c.risk==="LOW"?"badge-low":
-                   c.risk==="MODERATE"?"badge-moderate":"badge-high";
-
-    let slaText = c.risk === "HIGH" ? formatSLAText(c.sla_remaining_sec) : "-";
-
-    table.innerHTML+=`
-    <tr>
-      <td class="px-4 py-2 text-left">${c.customer_id}</td>
-      <td class="px-4 py-2 text-left"><span class="px-2 py-1 rounded font-semibold ${badgeClass}">${c.risk}</span></td>
-      <td class="px-4 py-2 text-left">${(c.churn_prob*100).toFixed(1)}%</td>
-      <td class="px-4 py-2 text-left">${(conf(c)*100).toFixed(1)}%</td>
-      <td class="px-4 py-2 text-left ${c.sla_breached?'sla-breached':''}">${slaText}</td>
-      <td class="px-4 py-2 text-left"><button onclick='openModal(rows[${idx}])' class="bg-indigo-600 text-white px-2 py-1 rounded">View</button></td>
-    </tr>`;
-  });
-
-  kTotal.innerText=rows.length;
-  kCalls.innerText=rows.filter(c=>c.actions.includes("schedule_call")).length;
-  kHigh.innerText=rows.filter(c=>c.risk==="HIGH").length;
-  kConf.innerText=((rows.reduce((s,c)=>s+conf(c),0)/rows.length)*100).toFixed(1)+"%";
-
-  if(tableInterval) clearInterval(tableInterval);
-  tableInterval = setInterval(updateSLATable, 1000);
+    kTotal.innerText = s.total ?? 0;
+    kCalls.innerText = s.scheduled_calls ?? 0;
+    kHigh.innerText = s.high_risk ?? 0;
+    kConf.innerText = ((Number(s.avg_confidence || 0)) * 100).toFixed(1) + "%";
+  }catch(e){
+    console.error("summary error", e);
+  }
 }
 
+async function loadSupportCustomers(reset=false){
+  if (loadingMore) return;
+  if (!reset && reachedEnd) return;
+
+  loadingMore = true;
+  const indicator = document.getElementById("loadingMoreIndicator");
+
+  try{
+    if(reset){
+      skip = 0;
+      reachedEnd = false;
+      rows = [];
+      table.innerHTML = "";
+      if(indicator){
+        indicator.innerText = "Loading more customers...";
+        indicator.classList.add("hidden");
+      }
+    }
+
+    if(indicator){
+      indicator.innerText = "Loading more customers...";
+      indicator.classList.remove("hidden");
+    }
+
+    const res = await fetch(`${API}/dashboard/phase2/support?skip=${skip}&limit=${PAGE_SIZE}`);
+    if(!res.ok){
+      if(indicator){
+        indicator.innerText = "⚠ Failed to load";
+        setTimeout(()=>indicator.classList.add("hidden"), 1200);
+      }
+      return;
+    }
+
+    const newRows = await res.json();
+    if(!Array.isArray(newRows)){
+      console.error("Expected array:", newRows);
+      if(indicator){
+        indicator.innerText = "⚠ Bad server response";
+        setTimeout(()=>indicator.classList.add("hidden"), 1200);
+      }
+      return;
+    }
+
+    if(newRows.length === 0){
+      reachedEnd = true;
+      if(indicator){
+        indicator.innerText = "✅ All customers loaded";
+        indicator.classList.remove("hidden");
+      }
+      return;
+    }
+
+    // append into memory
+    rows = rows.concat(newRows);
+
+    // render appended rows only
+    newRows.forEach((c)=>{
+      const badgeClass =
+        c.risk==="NO_RISK" ? "badge-no" :
+        c.risk==="LOW" ? "badge-low" :
+        c.risk==="MODERATE" ? "badge-moderate" : "badge-high";
+
+      const slaText = (c.risk === "HIGH") ? formatSLAText(c.sla_remaining_sec) : "-";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="px-4 py-2 text-left">${c.customer_id}</td>
+        <td class="px-4 py-2 text-left"><span class="px-2 py-1 rounded font-semibold ${badgeClass}">${c.risk}</span></td>
+        <td class="px-4 py-2 text-left">${(Number(c.churn_prob||0)*100).toFixed(1)}%</td>
+        <td class="px-4 py-2 text-left">${(conf(c)*100).toFixed(1)}%</td>
+        <td class="px-4 py-2 text-left ${c.sla_breached?'sla-breached':''}">${slaText}</td>
+        <td class="px-4 py-2 text-left"><button class="bg-indigo-600 text-white px-2 py-1 rounded">View</button></td>
+      `;
+
+      tr.querySelector("button").addEventListener("click", () => openModal(c));
+      table.appendChild(tr);
+    });
+
+    skip += newRows.length;
+
+    // hide indicator after successful load
+    if(indicator) indicator.classList.add("hidden");
+
+    // start SLA tick for visible rows
+    if(tableInterval) clearInterval(tableInterval);
+    tableInterval = setInterval(updateSLATable, 1000);
+
+  }catch(e){
+    console.error("loadSupportCustomers error", e);
+  }finally{
+    loadingMore = false;
+  }
+}
 
 function updateSLATable(){
+  // Only updates already-loaded rows (fine)
   rows.forEach((c, idx)=>{
-    if(c.risk==="HIGH" && c.sla_remaining_sec>0) c.sla_remaining_sec--;
-
-    const slaText = c.risk==="HIGH" ? formatSLAText(c.sla_remaining_sec) : "-";
+    if(c.risk==="HIGH" && typeof c.sla_remaining_sec === "number" && c.sla_remaining_sec > 0){
+      c.sla_remaining_sec--;
+    }
 
     const row = table.rows[idx];
-    if(row){
-      row.cells[4].innerText = slaText;
-      if(c.risk==="HIGH" && c.sla_remaining_sec<=0){
-        row.cells[4].classList.add("sla-breached");
-        row.classList.add("sla-flash");
-      }
+    if(!row) return;
+
+    const slaText = (c.risk==="HIGH") ? formatSLAText(c.sla_remaining_sec) : "-";
+    row.cells[4].innerText = slaText;
+
+    if(c.risk==="HIGH" && c.sla_remaining_sec<=0){
+      row.cells[4].classList.add("sla-breached");
     }
   });
 }
 
 function openModal(c){
-  active=c;
+  active = c;
   backdrop.classList.remove("hidden");
   modal.classList.remove("hidden");
 
-  mTitle.innerText=`Customer ${c.customer_id}`;
-  mRisk.innerText=c.risk;
-  mConf.innerText=(conf(c)*100).toFixed(1)+"%";
-  mAgent.innerText=c.assigned_agent||"—";
-  mDemo.innerText=c.demo_brief||"-";
-  mCall.innerText=c.call_script||"-";
-  mEmail.innerText=c.email_draft||"-";
-  mNotes.value=c.agent_notes||"";
+  mTitle.innerText = `Customer ${c.customer_id}`;
+  mRisk.innerText = c.risk || "-";
+  mConf.innerText = (conf(c)*100).toFixed(1) + "%";
+  mAgent.innerText = c.assigned_agent || "—";
+  mDemo.innerText = c.demo_brief || "-";
+  mCall.innerText = c.call_script || "-";
+  mEmail.innerText = c.email_draft || "-";
+  mNotes.value = c.agent_notes || "";
 
-  mExplain.innerText=`Prediction confidence ${(conf(c)*100).toFixed(1)}%.
+  mExplain.innerText = `Prediction confidence ${(conf(c)*100).toFixed(1)}%.
 Risk classified as ${c.risk}.
-Decision based on churn probability ${(c.churn_prob*100).toFixed(1)}% and historical trends.`;
+Decision based on churn probability ${(Number(c.churn_prob||0)*100).toFixed(1)}% and historical trends.`;
 
-  if(c.risk==="HIGH") startSLA(c.sla_remaining_sec);
-  else mSLA.innerText = "-";
+  if(c.risk==="HIGH"){
+    startSLA(c.sla_remaining_sec);
+  } else {
+    mSLA.innerText = "-";
+  }
 }
 
 function startSLA(sec){
   clearInterval(slaTimer);
-  let s=sec!==null && !isNaN(sec)?sec:DEFAULT_SLA_SEC;
+  let s = (typeof sec === "number" && !isNaN(sec)) ? sec : null;
+
+  if(s === null){
+    mSLA.innerText = "-";
+    return;
+  }
+
   slaTimer=setInterval(()=>{
-    if(s<=0){ mSLA.innerText="0m"; clearInterval(slaTimer); return; }
+    if(s<=0){ mSLA.innerText="0:00:00"; clearInterval(slaTimer); return; }
     s--;
     const h=Math.floor(s/3600);
     const m=Math.floor((s%3600)/60);
@@ -247,12 +340,17 @@ function startSLA(sec){
 
 async function assignAgent(){
   if(!active) return;
+
   await fetch(`${API}/dashboard/phase2/assign_agent`,{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({customer_id:active.customer_id,agent:agentSelect.value})
+    body:JSON.stringify({ customer_id: active.customer_id, agent: agentSelect.value })
   });
-  closeModal(); loadSupportCustomers();
+
+  closeModal();
+
+  // Refresh KPIs, and refresh table only if user is at top
+  await loadSupportSummary();
 }
 
 function closeModal(){
@@ -261,9 +359,36 @@ function closeModal(){
   backdrop.classList.add("hidden");
 }
 
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
-backdrop.onclick=closeModal;
-window.onload=loadSupportCustomers;
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+backdrop.onclick = closeModal;
+
+// Infinite scroll on the table container
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadSupportSummary();
+  await loadSupportCustomers(true);
+
+  const scroller = document.getElementById("supportScroll");
+  if(scroller){
+    scroller.addEventListener("scroll", async ()=>{
+      const nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 80;
+      if(nearBottom){
+        await loadSupportCustomers(false);
+      }
+    });
+  }
+
+  // refresh summary periodically
+  setInterval(loadSupportSummary, 10000);
+
+  // refresh list only if user is at top (prevents blanking while scrolling)
+  setInterval(async ()=>{
+    const scroller2 = document.getElementById("supportScroll");
+    if(!scroller2) return;
+    if(scroller2.scrollTop < 10){
+      await loadSupportCustomers(true);
+    }
+  }, 15000);
+});
 </script>
 
 </body>

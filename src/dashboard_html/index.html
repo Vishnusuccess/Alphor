@@ -23,13 +23,8 @@
   <!-- PHASE TRANSITION -->
   <section id="phaseTransition" class="hidden mx-6 mt-4">
     <div class="bg-green-50 border border-green-200 p-4 rounded-xl flex items-center justify-between">
-      <p class="text-green-800 font-semibold">
-        ✅ Model is ready for Phase 1 (Autonomous Mode)
-      </p>
-      <button
-        onclick="goToPhase1()"
-        class="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition"
-      >
+      <p class="text-green-800 font-semibold">✅ Model is ready for Phase 1 (Autonomous Mode)</p>
+      <button onclick="goToPhase1()" class="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition">
         Proceed to Phase 1
       </button>
     </div>
@@ -37,19 +32,19 @@
 
   <!-- OVERVIEW SUMMARY -->
   <section class="grid grid-cols-1 md:grid-cols-4 gap-6 p-6">
-    <div class="bg-white p-6 rounded-xl shadow hover:shadow-xl transition duration-300">
+    <div class="bg-white p-6 rounded-xl shadow">
       <p class="text-sm text-gray-500">Customers Scored</p>
       <p id="totalCustomers" class="text-3xl font-bold mt-2">0</p>
     </div>
-    <div class="bg-white p-6 rounded-xl shadow hover:shadow-xl transition duration-300">
+    <div class="bg-white p-6 rounded-xl shadow">
       <p class="text-sm text-gray-500">High Risk</p>
       <p id="highRiskCount" class="text-3xl font-bold text-red-600 mt-2">0</p>
     </div>
-    <div class="bg-white p-6 rounded-xl shadow hover:shadow-xl transition duration-300">
+    <div class="bg-white p-6 rounded-xl shadow">
       <p class="text-sm text-gray-500">Medium Risk</p>
       <p id="mediumRiskCount" class="text-3xl font-bold text-yellow-600 mt-2">0</p>
     </div>
-    <div class="bg-white p-6 rounded-xl shadow hover:shadow-xl transition duration-300">
+    <div class="bg-white p-6 rounded-xl shadow">
       <p class="text-sm text-gray-500">Low Risk</p>
       <p id="lowRiskCount" class="text-3xl font-bold text-green-600 mt-2">0</p>
     </div>
@@ -60,10 +55,7 @@
     <h2 class="text-xl font-semibold mb-4">Upload Customer CSV</h2>
     <div class="flex flex-col md:flex-row items-start md:items-center gap-4">
       <input type="file" id="csvFile" class="border rounded px-4 py-2 w-full md:w-auto" />
-      <button
-        onclick="uploadCSV()"
-        class="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition"
-      >
+      <button onclick="uploadCSV()" class="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition">
         Run Phase 0 Prediction
       </button>
     </div>
@@ -74,20 +66,15 @@
   <section class="bg-white mx-6 p-6 rounded-xl shadow-md mb-6">
     <h2 class="text-xl font-semibold mb-4">Model Retraining & Metrics</h2>
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-      <button
-        onclick="retrainModel()"
-        class="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition"
-      >
+      <button onclick="retrainModel()" class="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition">
         Trigger Phase 0 Retraining
       </button>
       <p id="retrainStatus" class="text-sm font-medium text-gray-700"></p>
     </div>
     <div class="flex flex-col md:flex-row gap-6">
-      <!-- Small Graph -->
       <div class="flex-1 bg-gray-50 rounded-xl p-4 shadow-inner">
         <canvas id="metricsChart" class="w-full h-40"></canvas>
       </div>
-      <!-- Accuracy & Phase 1 -->
       <div class="flex flex-col gap-2 w-44 bg-gray-50 p-4 rounded-xl shadow-inner">
         <p class="text-sm text-gray-500">Previous Accuracy</p>
         <p id="prevAccuracy" class="text-xl font-bold">0%</p>
@@ -98,22 +85,29 @@
     </div>
   </section>
 
-  <!-- CUSTOMER TABLE WITH FEEDBACK -->
+  <!-- CUSTOMER TABLE WITH FEEDBACK (scroll container) -->
   <section class="p-6">
-    <div class="bg-white rounded-xl shadow overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-2 text-left">Customer ID</th>
-            <th class="px-4 py-2 text-left">Risk Level</th>
-            <th class="px-4 py-2 text-left">Churn Probability</th>
-            <th class="px-4 py-2 text-left">Policy Tenure</th>
-            <th class="px-4 py-2 text-left">Missed Payments</th>
-            <th class="px-4 py-2 text-left">Feedback</th>
-          </tr>
-        </thead>
-        <tbody id="customerTable"></tbody>
-      </table>
+    <div class="bg-white rounded-xl shadow">
+      <div id="tableScroller" class="max-h-[520px] overflow-y-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-4 py-2 text-left">Customer ID</th>
+              <th class="px-4 py-2 text-left">Risk Level</th>
+              <th class="px-4 py-2 text-left">Churn Probability</th>
+              <th class="px-4 py-2 text-left">Policy Tenure</th>
+              <th class="px-4 py-2 text-left">Missed Payments</th>
+              <th class="px-4 py-2 text-left">Feedback</th>
+            </tr>
+          </thead>
+          <tbody id="customerTable"></tbody>
+        </table>
+
+        <div id="loadingMoreIndicator" class="text-center text-sm text-gray-500 py-2 hidden">
+          Loading more customers...
+        </div>
+      </div>
+
       <div class="p-4 flex justify-end items-center gap-4">
         <button onclick="submitAllFeedback()" class="bg-purple-600 text-white px-6 py-2 rounded-xl hover:bg-purple-700 transition">
           Submit Feedback
@@ -123,151 +117,156 @@
     </div>
   </section>
 
-  <!-- SCRIPT -->
-  <script>
-  const API_BASE = "http://localhost:8000";
-  let customerData = [];
-  let metricsChart;
-  let prevAccuracyValue = 0;
+<script>
+const API_BASE = "http://localhost:8000";
 
-  // ---------------- UTILITY ----------------
-  function riskLabel(prob) {
-    if (prob >= 0.6) return { label: "High", color: "bg-red-100 text-red-700" };
-    if (prob >= 0.3) return { label: "Medium", color: "bg-yellow-100 text-yellow-700" };
-    return { label: "Low", color: "bg-green-100 text-green-700" };
-  }
+let customerData = [];     // only loaded pages (for quick lookup if needed)
+let metricsChart;
+let prevAccuracyValue = 0;
 
-  // ---------------- DASHBOARD ----------------
+let skip = 0;
+const PAGE_SIZE = 200;
+let loadingMore = false;
+let reachedEnd = false;
 
-  // ---------------- DASHBOARD ----------------
-async function loadDashboard() {
+// ---------------- UTILITY ----------------
+function riskLabel(prob) {
+  prob = Number(prob) || 0;
+  if (prob >= 0.6) return { label: "High", color: "bg-red-100 text-red-700" };
+  if (prob >= 0.3) return { label: "Medium", color: "bg-yellow-100 text-yellow-700" };
+  return { label: "Low", color: "bg-green-100 text-green-700" };
+}
+
+// ---------------- PHASE 0 SUMMARY (KPIs for ALL customers) ----------------
+async function loadPhase0Summary() {
   try {
-    const res = await fetch(`${API_BASE}/dashboard/summary`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const res = await fetch(`${API_BASE}/dashboard/phase0/summary`, { cache: "no-store" });
+    if (!res.ok) return;
+    const s = await res.json();
 
-    // Ensure we always have a customers array
-    customerData = Array.isArray(data.customers) ? data.customers : [];
+    totalCustomers.innerText = s.total ?? 0;
+    highRiskCount.innerText = s.high ?? 0;
+    mediumRiskCount.innerText = s.medium ?? 0;
+    lowRiskCount.innerText = s.low ?? 0;
 
-    // Render after data is populated
-    renderSummary();
-    renderTable();
-
-    // Phase 1 readiness
-    if (data.phase === "PHASE_1") {
-      window.location.href = "phase1.html";
-      return;
-    }
-
-    if (data.phase_1_ready) {
+    // Optional: show Phase1-ready banner based on system phase/flag
+    if (s.phase_1_ready === true) {
       document.getElementById("phaseTransition").classList.remove("hidden");
     } else {
       document.getElementById("phaseTransition").classList.add("hidden");
     }
-
-  } catch (err) {
-    console.error("Dashboard load failed:", err);
-    alert("Failed to load dashboard data. Check backend.");
+  } catch (e) {
+    console.error("phase0 summary error", e);
   }
 }
 
-// ---------------- SUMMARY ----------------
-function renderSummary() {
-  const total = customerData.length;
-  let high = 0, med = 0, low = 0;
-
-  customerData.forEach(c => {
-    const prob = Number(c.churn_prob) || 0;
-    if (prob >= 0.6) high++;
-    else if (prob >= 0.3) med++;
-    else low++;
-  });
-
-  document.getElementById("totalCustomers").innerText = total;
-  document.getElementById("highRiskCount").innerText = high;
-  document.getElementById("mediumRiskCount").innerText = med;
-  document.getElementById("lowRiskCount").innerText = low;
-}
-
-// ---------------- CUSTOMER TABLE ----------------
-function renderTable() {
+// ---------------- TABLE APPEND (fast) ----------------
+function appendTableRows(rows) {
   const table = document.getElementById("customerTable");
-  if (!customerData || customerData.length === 0) {
-    table.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500">No customers found</td></tr>`;
-    return;
-  }
 
-  let html = "";
-
-  customerData.forEach(c => {
-    // Clean ID for display: strip quotes and whitespace
-    const custID = (c.ID || '-').replace(/"/g, '').trim();
-
+  rows.forEach(c => {
+    const custID = String(c.ID || "-").replace(/"/g, "").trim();
     const churnProb = Number(c.churn_prob) || 0;
-    let riskLabelText, riskColor;
+    const risk = riskLabel(churnProb);
 
-    if (churnProb >= 0.6) {
-      riskLabelText = "High";
-      riskColor = "bg-red-100 text-red-700";
-    } else if (churnProb >= 0.3) {
-      riskLabelText = "Medium";
-      riskColor = "bg-yellow-100 text-yellow-700";
-    } else {
-      riskLabelText = "Low";
-      riskColor = "bg-green-100 text-green-700";
-    }
+    const tenure = (c.policy_tenure != null) ? c.policy_tenure : "-";
+    const missed = (c.missed_payments != null) ? c.missed_payments : "-";
 
-    const tenure = c.policy_tenure != null ? c.policy_tenure : '-';
-    const missed = c.missed_payments != null ? c.missed_payments : '-';
-
-    html += `
-      <tr class="border-t">
-        <td class="px-4 py-2">${custID}</td>
-        <td class="px-4 py-2">
-          <span class="px-2 py-1 rounded ${riskColor} font-semibold">${riskLabelText}</span>
-        </td>
-        <td class="px-4 py-2">${(churnProb * 100).toFixed(1)}%</td>
-        <td class="px-4 py-2">${tenure}</td>
-        <td class="px-4 py-2">${missed}</td>
-        <td class="px-4 py-2">
-          <select class="feedback-select border rounded px-2 py-1 text-sm" data-id="${custID}">
-            <option value="">--</option>
-            <option value="1">Churned</option>
-            <option value="0">Not Churned</option>
-          </select>
-        </td>
-      </tr>
+    const tr = document.createElement("tr");
+    tr.className = "border-t";
+    tr.innerHTML = `
+      <td class="px-4 py-2">${custID}</td>
+      <td class="px-4 py-2">
+        <span class="px-2 py-1 rounded ${risk.color} font-semibold">${risk.label}</span>
+      </td>
+      <td class="px-4 py-2">${(churnProb * 100).toFixed(1)}%</td>
+      <td class="px-4 py-2">${tenure}</td>
+      <td class="px-4 py-2">${missed}</td>
+      <td class="px-4 py-2">
+        <select class="feedback-select border rounded px-2 py-1 text-sm" data-id="${custID}">
+          <option value="">--</option>
+          <option value="1">Churned</option>
+          <option value="0">Not Churned</option>
+        </select>
+      </td>
     `;
+    table.appendChild(tr);
   });
-
-  table.innerHTML = html;
 }
 
+// ---------------- PHASE 0 CUSTOMERS (PAGINATED) ----------------
+async function loadPhase0Customers(reset=false) {
+  if (loadingMore) return;
+  if (!reset && reachedEnd) return;
 
-  // ---------------- FEEDBACK ----------------
-  async function submitAllFeedback() {
-    const feedbackElements = document.querySelectorAll(".feedback-select");
-    const feedbackData = [];
-    feedbackElements.forEach(sel=>{
-      const val = sel.value;
-      if(val!=="") feedbackData.push({ ID: sel.dataset.id, actual_churn: Number(val)});
-    });
-    if(feedbackData.length===0) return alert("No feedback selected");
-    try {
-      await fetch(`${API_BASE}/dashboard/feedback`, {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(feedbackData)
-      });
-      document.getElementById("feedbackStatus").innerText = "Feedback submitted!";
-      setTimeout(()=>{ document.getElementById("feedbackStatus").innerText=""; }, 3000);
-    } catch(err){
-      console.error(err);
-      alert("Failed to submit feedback");
+  loadingMore = true;
+  const indicator = document.getElementById("loadingMoreIndicator");
+
+  try {
+    if (reset) {
+      skip = 0;
+      reachedEnd = false;
+      customerData = [];
+      document.getElementById("customerTable").innerHTML = "";
+      if (indicator) { indicator.innerText = "Loading more customers..."; indicator.classList.add("hidden"); }
     }
-  }
 
- // ---------------- CSV UPLOAD ----------------
+    if (indicator) { indicator.innerText = "Loading more customers..."; indicator.classList.remove("hidden"); }
+
+    const res = await fetch(`${API_BASE}/dashboard/phase0/customers?skip=${skip}&limit=${PAGE_SIZE}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      reachedEnd = true;
+      if (indicator) { indicator.innerText = "✅ All customers loaded"; indicator.classList.remove("hidden"); }
+      return;
+    }
+
+    customerData = customerData.concat(rows);
+    appendTableRows(rows);
+
+    skip += rows.length;
+
+    if (indicator) indicator.classList.add("hidden");
+  } catch (err) {
+    console.error("Phase0 customers load failed:", err);
+    if (indicator) {
+      indicator.innerText = "⚠ Failed to load more";
+      indicator.classList.remove("hidden");
+      setTimeout(() => indicator.classList.add("hidden"), 1500);
+    }
+  } finally {
+    loadingMore = false;
+  }
+}
+
+// ---------------- FEEDBACK ----------------
+async function submitAllFeedback() {
+  const feedbackElements = document.querySelectorAll(".feedback-select");
+  const feedbackData = [];
+  feedbackElements.forEach(sel => {
+    const val = sel.value;
+    if (val !== "") feedbackData.push({ ID: sel.dataset.id, actual_churn: Number(val) });
+  });
+
+  if (feedbackData.length === 0) return alert("No feedback selected");
+
+  try {
+    await fetch(`${API_BASE}/dashboard/feedback`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(feedbackData)
+    });
+    document.getElementById("feedbackStatus").innerText = "Feedback submitted!";
+    setTimeout(()=>{ document.getElementById("feedbackStatus").innerText=""; }, 3000);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to submit feedback");
+  }
+}
+
+// ---------------- CSV UPLOAD ----------------
 async function uploadCSV() {
   const file = document.getElementById("csvFile").files[0];
   if (!file) return alert("Please select a CSV file");
@@ -282,84 +281,113 @@ async function uploadCSV() {
     if (!res.ok) throw new Error("Upload failed");
 
     const data = await res.json();
-    // Use the new "message" returned by backend
-    document.getElementById("uploadStatus").innerText = data.message;
+    document.getElementById("uploadStatus").innerText = data.message || "Uploaded";
 
-    await loadDashboard();
+    // Refresh KPIs + reload table from top
+    await loadPhase0Summary();
+    await loadPhase0Customers(true);
   } catch (err) {
     console.error(err);
     document.getElementById("uploadStatus").innerText = err.message;
   }
 }
 
+// ---------------- RETRAIN MODEL ----------------
+async function retrainModel() {
+  document.getElementById("retrainStatus").innerText = "Retraining in progress...";
+  try {
+    const res = await fetch(`${API_BASE}/phase_0/retrain`, {method:"POST"});
+    const data = await res.json();
 
-  // ---------------- RETRAIN MODEL ----------------
-  async function retrainModel() {
-    document.getElementById("retrainStatus").innerText = "Retraining in progress...";
-    try {
-      const res = await fetch(`${API_BASE}/phase_0/retrain`, {method:"POST"});
-      const data = await res.json();
-      if(res.ok){
-        document.getElementById("retrainStatus").innerText = "Retraining done!";
-        document.getElementById("prevAccuracy").innerText = (prevAccuracyValue*100).toFixed(2)+"%";
-        document.getElementById("updatedAccuracy").innerText = (data.accuracy*100).toFixed(2)+"%";
-        prevAccuracyValue = data.accuracy;
-        document.getElementById("phase1Status").innerText = data.accuracy>=0.7 ? "✅ Phase 1 Ready":"";
-        await loadDashboard();
-        await loadMetrics();
-      }else throw new Error(data.detail||"Retraining failed");
-    }catch(err){
-      console.error(err);
-      document.getElementById("retrainStatus").innerText = "Retraining failed!";
-    }
-  }
+    if (!res.ok) throw new Error(data.detail || "Retraining failed");
 
-  // ---------------- METRICS CHART ----------------
-  async function loadMetrics() {
-    try {
-      const res = await fetch(`${API_BASE}/dashboard/metrics`);
-      const metrics = await res.json();
-      const filteredMetrics = metrics.filter(m => m.trained_at && m.accuracy != null);
-      const labels = filteredMetrics.map(m => new Date(m.trained_at).toLocaleString());
-      const accuracyData = filteredMetrics.map(m => Number(m.accuracy));
+    document.getElementById("retrainStatus").innerText = "Retraining done!";
+    document.getElementById("prevAccuracy").innerText = (prevAccuracyValue*100).toFixed(2) + "%";
+    document.getElementById("updatedAccuracy").innerText = (Number(data.accuracy || 0)*100).toFixed(2) + "%";
+    prevAccuracyValue = Number(data.accuracy || 0);
 
-      const ctx = document.getElementById("metricsChart").getContext("2d");
-      if(metricsChart) metricsChart.destroy();
-      metricsChart = new Chart(ctx,{
-        type:'line',
-        data:{
-          labels,
-          datasets:[{
-            label:'Validation Accuracy',
-            data:accuracyData,
-            borderColor:'rgba(37, 99, 235, 1)',
-            backgroundColor:'rgba(37, 99, 235, 0.2)',
-            tension:0.3,
-            fill:true
-          }]
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          plugins:{legend:{display:false}},
-          scales:{
-            y:{min:0,max:1,ticks:{callback:v=> (v*100).toFixed(0)+'%'}},
-            x:{ticks:{maxRotation:45,minRotation:0}}
-          }
-        }
-      });
-    }catch(err){console.error("Failed to load metrics",err);}
-  }
+    document.getElementById("phase1Status").innerText = prevAccuracyValue >= 0.7 ? "✅ Phase 1 Ready" : "";
 
-  function goToPhase1() {
-    window.location.href = "phase1.html";
-  }
-
-  window.addEventListener('DOMContentLoaded', async ()=>{
-    await loadDashboard();
+    await loadPhase0Summary();
+    await loadPhase0Customers(true);
     await loadMetrics();
-  });
-  </script>
+  } catch (err) {
+    console.error(err);
+    document.getElementById("retrainStatus").innerText = "Retraining failed!";
+  }
+}
+
+// ---------------- METRICS CHART ----------------
+async function loadMetrics() {
+  try {
+    const res = await fetch(`${API_BASE}/dashboard/metrics`, { cache: "no-store" });
+    const metrics = await res.json();
+
+    const filtered = (metrics || []).filter(m => m.trained_at && m.accuracy != null);
+    const labels = filtered.map(m => new Date(m.trained_at).toLocaleString());
+    const accuracyData = filtered.map(m => Number(m.accuracy));
+
+    const ctx = document.getElementById("metricsChart").getContext("2d");
+    if (metricsChart) metricsChart.destroy();
+
+    metricsChart = new Chart(ctx, {
+      type:'line',
+      data:{
+        labels,
+        datasets:[{
+          label:'Validation Accuracy',
+          data:accuracyData,
+          borderColor:'rgba(37, 99, 235, 1)',
+          backgroundColor:'rgba(37, 99, 235, 0.2)',
+          tension:0.3,
+          fill:true
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          y:{min:0,max:1,ticks:{callback:v=>(v*100).toFixed(0)+'%'}},
+          x:{ticks:{maxRotation:45,minRotation:0}}
+        }
+      }
+    });
+  } catch (err) {
+    console.error("Failed to load metrics", err);
+  }
+}
+
+function goToPhase1() {
+  window.location.href = "phase1.html";
+}
+
+// ---------------- INIT ----------------
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadPhase0Summary();
+  await loadPhase0Customers(true);
+  await loadMetrics();
+
+  // infinite scroll
+  const scroller = document.getElementById("tableScroller");
+  if (scroller) {
+    scroller.addEventListener("scroll", async () => {
+      const nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 80;
+      if (nearBottom) await loadPhase0Customers(false);
+    });
+  }
+
+  // Refresh summary periodically (KPIs always correct)
+  setInterval(loadPhase0Summary, 10000);
+
+  // Optional: refresh table only if user is at top (prevents wiping while scrolling)
+  setInterval(async () => {
+    const sc = document.getElementById("tableScroller");
+    if (!sc) return;
+    if (sc.scrollTop < 10) await loadPhase0Customers(true);
+  }, 15000);
+});
+</script>
 
 </body>
 </html>

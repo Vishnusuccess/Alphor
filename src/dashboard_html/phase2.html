@@ -79,7 +79,7 @@
 <!-- LIVE DECISION FEED -->
 <section class="p-6">
   <div class="bg-white rounded-xl shadow">
-    <div class="max-h-[500px] overflow-y-auto">
+    <div id="feedScroll" class="max-h-[500px] overflow-y-auto">
       <table class="min-w-full text-sm">
         <thead class="bg-gray-50 sticky top-0">
           <tr>
@@ -96,6 +96,10 @@
         </thead>
         <tbody id="decisionFeed"></tbody>
       </table>
+      <div id="loadingMoreIndicator" class="text-center text-sm text-gray-500 py-2 hidden">
+        Loading more customers...
+      </div>
+
     </div>
   </div>
 </section>
@@ -147,6 +151,11 @@
 
 <script>
 const API = "http://localhost:8000";
+let skip = 0;
+const PAGE_SIZE = 200;
+let loadingMore = false;
+let reachedEnd = false;
+
 let decisionFeedData = [];
 let accuracyChart, decisionFlowChart;
 let currentCustomerIdForNotes = null;
@@ -186,21 +195,81 @@ function updateKPIs(){
 }
 
 /* ---------- LOAD DECISION FEED ---------- */
-async function loadDecisionFeed(){
-  const res = await fetch(`${API}/dashboard/phase2/actions`);
-  decisionFeedData = await res.json();
-  const tbody = document.getElementById("decisionFeed");
-  tbody.innerHTML = "";
+async function loadDecisionFeed(reset=false){
+  if (loadingMore) return;           // keep this
+  if (!reset && reachedEnd) return;  // don't block resets
+  loadingMore = true;
 
-  decisionFeedData.forEach(c=>{
-    const cid = c.customer_id || c.ID || "-";
-    const prob = Number(c.churn_prob || 0);
-    const risk = riskLabel(prob);
-    const discount = Number(c.discount || 0);
-    const conf = Number(c.confidence || 0);
+  const indicator = document.getElementById("loadingMoreIndicator");
 
-    tbody.innerHTML += `
-      <tr class="border-t hover:bg-gray-50 transition">
+  try {
+    // If reset, clear everything first
+    if (reset) {
+      skip = 0;
+      reachedEnd = false;
+      decisionFeedData = [];
+      document.getElementById("decisionFeed").innerHTML = "";
+
+      // reset indicator state
+      if (indicator) {
+        indicator.innerText = "Loading more customers...";
+        indicator.classList.add("hidden");
+      }
+    }
+
+    // show indicator while fetching
+    if (indicator) {
+      indicator.innerText = "Loading more customers...";
+      indicator.classList.remove("hidden");
+    }
+
+    const res = await fetch(`${API}/dashboard/phase2/actions?skip=${skip}&limit=${PAGE_SIZE}`);
+    if (!res.ok) {
+      console.error("phase2/actions failed:", res.status);
+      if (indicator) {
+        indicator.innerText = "⚠ Failed to load more";
+        indicator.classList.remove("hidden");
+        setTimeout(() => indicator.classList.add("hidden"), 1500);
+      }
+      return;
+    }
+
+    const newRows = await res.json();
+
+    if (!Array.isArray(newRows)) {
+      console.error("Expected array from /phase2/actions, got:", newRows);
+      if (indicator) {
+        indicator.innerText = "⚠ Bad response from server";
+        indicator.classList.remove("hidden");
+        setTimeout(() => indicator.classList.add("hidden"), 1500);
+      }
+      return;
+    }
+
+    // No more rows -> mark end
+    if (newRows.length === 0) {
+      reachedEnd = true;
+      if (indicator) {
+        indicator.innerText = "✅ All customers loaded";
+        indicator.classList.remove("hidden");
+      }
+      return;
+    }
+
+    // Append
+    decisionFeedData = decisionFeedData.concat(newRows);
+    const tbody = document.getElementById("decisionFeed");
+
+    newRows.forEach(c => {
+      const cid = c.customer_id || c.ID || "-";
+      const prob = Number(c.churn_prob || 0);
+      const risk = riskLabel(prob);
+      const discount = Number(c.discount || 0);
+      const conf = Number(c.confidence || 0);
+
+      const tr = document.createElement("tr");
+      tr.className = "border-t hover:bg-gray-50 transition";
+      tr.innerHTML = `
         <td class="px-3 py-1.5">${cid}</td>
         <td class="px-3 py-1.5"><span class="px-2 py-1 rounded ${risk.color} font-semibold">${risk.label}</span></td>
         <td class="px-3 py-1.5">${(prob*100).toFixed(1)}%</td>
@@ -210,15 +279,32 @@ async function loadDecisionFeed(){
         <td class="px-3 py-1.5">${c.auto_executed ? "Auto" : "Escalated"}</td>
         <td class="px-3 py-1.5">${(conf*100).toFixed(1)}%</td>
         <td class="px-3 py-1.5">
-          <button onclick="showDetails('${cid}')" class="bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 text-sm">View</button>
+          <button class="bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 text-sm">View</button>
         </td>
-      </tr>
-    `;
-  });
+      `;
 
-  updateKPIs();
-  renderDecisionFlowChart();
+      tr.querySelector("button").addEventListener("click", () => showDetails(cid));
+      tbody.appendChild(tr);
+    });
+
+    // Advance pagination
+    skip += newRows.length;
+
+    // hide indicator after successful load
+    if (indicator) indicator.classList.add("hidden");
+
+  } catch (e) {
+    console.error("loadDecisionFeed error:", e);
+    if (indicator) {
+      indicator.innerText = "⚠ Error loading more";
+      indicator.classList.remove("hidden");
+      setTimeout(() => indicator.classList.add("hidden"), 1500);
+    }
+  } finally {
+    loadingMore = false;
+  }
 }
+
 
 /* ---------- DECISION FLOW CHART ---------- */
 function renderDecisionFlowChart(){
@@ -321,6 +407,67 @@ async function loadMetrics() {
 }
 setInterval(loadMetrics, 15000);
 
+/* ---------- LOAD SUMMARY ---------- */
+async function loadPhase2Summary(){
+  try {
+    const res = await fetch(`${API}/dashboard/phase2/summary`);
+    if (!res.ok) return;
+    const s = await res.json();
+
+    // Update KPIs using ALL customers, not just loaded table rows
+    totalCustomers.innerText = s.total ?? 0;
+    autoActions.innerText = s.auto_actions ?? 0;
+    escalations.innerText = s.escalations ?? 0;
+    retentionValue.innerText = "$" + Number(s.retention_value || 0).toFixed(0);
+    avgConfidence.innerText = (Number(s.avg_confidence || 0) * 100).toFixed(1) + "%";
+  } catch(e) {
+    console.error("summary load error", e);
+  }
+}
+
+/* ---------- PIE CHART RISK SUMMARY ---------- */
+async function loadRiskSummaryPie(){
+  try{
+    const res = await fetch(`${API}/dashboard/phase2/risk_summary`);
+    if(!res.ok) return;
+
+    const counts = await res.json(); // {NO_RISK:..., LOW:..., MODERATE:..., HIGH:...}
+
+    if (decisionFlowChart) decisionFlowChart.destroy();
+
+    decisionFlowChart = new Chart(
+      document.getElementById("decisionFlowChart"),
+      {
+        type: "doughnut",
+        data: {
+          labels: ["NO_RISK","LOW","MODERATE","HIGH"],
+          datasets: [{
+            data: [
+              Number(counts.NO_RISK || 0),
+              Number(counts.LOW || 0),
+              Number(counts.MODERATE || 0),
+              Number(counts.HIGH || 0)
+            ],
+            backgroundColor: ["#16a34a","#3b82f6","#f97316","#ef4444"]
+          }]
+        },
+        options: {
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { boxWidth: 18, padding: 20 },
+              maxHeight: 100
+            }
+          }
+        }
+      }
+    );
+
+  } catch(e){
+    console.error("loadRiskSummaryPie error:", e);
+  }
+}
+
 
 /* ---------- PHASE BADGE ---------- */
 async function checkPhaseStatus() {
@@ -421,13 +568,30 @@ document.querySelectorAll(".tabBtn").forEach(btn=>{
 });
 
 /* ---------- INIT ---------- */
-window.onload = async () => {
-  await loadDecisionFeed();
-  await loadMetrics();
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadDecisionFeed(true);   // table pages
+  await loadMetrics();            // accuracy line
   await checkPhaseStatus();
+
+  await loadPhase2Summary();      // KPIs all customers
+  await loadRiskSummaryPie();     // Pie all customers
+
+  const scroller = document.getElementById("feedScroll");
+  if (scroller) {
+    scroller.addEventListener("scroll", async () => {
+      const nearBottom =
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 80;
+      if (nearBottom) await loadDecisionFeed(false);
+    });
+  }
+
+  // refresh KPIs + pie (all customers)
+  setInterval(loadPhase2Summary, 10000);
+  setInterval(loadRiskSummaryPie, 10000);
   setInterval(checkPhaseStatus, 10000);
-  setInterval(loadDecisionFeed, 10000);
-}
+});
+
 </script>
+
 </body>
 </html>
