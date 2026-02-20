@@ -89,7 +89,7 @@
             <th class="px-3 py-1.5">Decision</th>
             <th class="px-3 py-1.5">Actions</th>
             <th class="px-3 py-1.5">Discount</th>
-            <th class="px-3 py-1.5">Auto/Escalated</th>
+            <th class="px-3 py-1.5">Execution Mode</th>
             <th class="px-3 py-1.5">Confidence</th>
             <th class="px-3 py-1.5">Details</th>
           </tr>
@@ -168,6 +168,36 @@ function riskLabel(prob){
   if(prob < 0.70) return {label:"MODERATE", color:"bg-orange-100 text-orange-700"};
   return {label:"HIGH", color:"bg-red-100 text-red-700"};
 }
+function applyRiskPolicy(c) {
+  const risk = String(c.risk || "").toUpperCase();
+
+  if (risk === "HIGH") {
+    c.decision = "ESCALATE";
+    c.actions = [];
+    c.auto_executed = false;
+    return c;
+  }
+
+  if (risk === "MODERATE") {
+    c.decision = "EXECUTE";
+    c.actions = ["send_email", "offer_discount"];
+    c.auto_executed = true;
+    return c;
+  }
+
+  if (risk === "LOW") {
+    c.decision = "EXECUTE";
+    c.actions = ["send_email"];
+    c.auto_executed = true;
+    return c;
+  }
+
+  // NO_RISK
+  c.decision = "NONE";
+  c.actions = [];
+  c.auto_executed = true; // auto = no action needed
+  return c;
+}
 
 /* ---------- KPIs ---------- */
 function animateKPI(el){ el.classList.remove("kpi-animate"); void el.offsetWidth; el.classList.add("kpi-animate"); }
@@ -235,6 +265,8 @@ async function loadDecisionFeed(reset=false){
     }
 
     const newRows = await res.json();
+    newRows.forEach(applyRiskPolicy);
+
 
     if (!Array.isArray(newRows)) {
       console.error("Expected array from /phase2/actions, got:", newRows);

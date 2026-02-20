@@ -103,7 +103,7 @@ tr:hover { background-color: #f9fafb; }
 
 <div class="grid grid-cols-2 gap-4">
   <div>
-    <h3 class="font-semibold">Demo Brief</h3>
+    <h3 class="font-semibold">Brief</h3>
     <pre id="mDemo" class="bg-slate-100 p-3 rounded whitespace-pre-wrap"></pre>
   </div>
   <div>
@@ -152,10 +152,53 @@ let loadingMore = false;
 let reachedEnd = false;
 
 const conf = c => typeof c.confidence === "number" ? c.confidence : 0;
+// ===== SLA MOCK CONFIG =====
+const SLA_MOCK_ENABLED = true;
+
+// Demo SLA range for HIGH risk (in seconds)
+const SLA_MIN_SEC = 5 * 60;     // 5 minutes
+const SLA_MAX_SEC = 120 * 60;   // 2 hours
+
+// Deterministic-ish random based on customer_id so it doesn't change on reload
+function seededRand(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // 0..1
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+function mockSLASeconds(customerId) {
+  const r = seededRand(String(customerId || "UNKNOWN"));
+  return Math.floor(SLA_MIN_SEC + r * (SLA_MAX_SEC - SLA_MIN_SEC));
+}
+
+function ensureSLAFields(c) {
+  if (c.risk === "HIGH") {
+    // If server didn't send SLA, create a mock value
+    if (typeof c.sla_remaining_sec !== "number" || isNaN(c.sla_remaining_sec)) {
+      c.sla_remaining_sec = mockSLASeconds(c.customer_id);
+    }
+    // Initialize breached flag if missing
+    if (typeof c.sla_breached !== "boolean") c.sla_breached = false;
+  } else {
+    // non-high risk: no SLA tracking
+    c.sla_remaining_sec = c.sla_remaining_sec ?? null;
+    c.sla_breached = c.sla_breached ?? false;
+  }
+  return c;
+}
+
 
 function formatSLAText(sec){
-  if(sec === null || sec === undefined || isNaN(sec)) return "-";
-  sec = Math.max(0, Math.floor(sec));
+  if (sec === null || sec === undefined || isNaN(sec)) return "-";
+
+  sec = Math.floor(sec);
+
+  // 🚨 SLA breached
+  if (sec <= 0) return "BREACHED";
 
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -164,6 +207,7 @@ function formatSLAText(sec){
   // 1:59:07 format
   return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
+
 
 
 async function loadSupportSummary(){
@@ -215,6 +259,7 @@ async function loadSupportCustomers(reset=false){
     }
 
     const newRows = await res.json();
+    if (SLA_MOCK_ENABLED) newRows.forEach(ensureSLAFields);
     if(!Array.isArray(newRows)){
       console.error("Expected array:", newRows);
       if(indicator){
@@ -288,9 +333,11 @@ function updateSLATable(){
     const slaText = (c.risk==="HIGH") ? formatSLAText(c.sla_remaining_sec) : "-";
     row.cells[4].innerText = slaText;
 
-    if(c.risk==="HIGH" && c.sla_remaining_sec<=0){
-      row.cells[4].classList.add("sla-breached");
-    }
+    if (c.risk === "HIGH" && (c.sla_remaining_sec ?? 0) <= 0) {
+    c.sla_breached = true;
+    row.cells[4].classList.add("sla-breached");
+  }
+
   });
 }
 
@@ -380,14 +427,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // refresh summary periodically
   setInterval(loadSupportSummary, 10000);
 
-  // refresh list only if user is at top (prevents blanking while scrolling)
-  setInterval(async ()=>{
-    const scroller2 = document.getElementById("supportScroll");
-    if(!scroller2) return;
-    if(scroller2.scrollTop < 10){
-      await loadSupportCustomers(true);
-    }
-  }, 15000);
 });
 </script>
 

@@ -49,7 +49,7 @@
   </div>
 
   <div class="bg-white p-4 md:p-6 rounded-xl shadow text-center">
-    <p class="text-sm text-gray-500">Total Discount Given</p>
+    <p class="text-sm text-gray-500">Discount Budget Used</p>
     <p id="totalDiscount" class="text-3xl font-bold text-purple-600">$0</p>
   </div>
 
@@ -148,7 +148,20 @@
 
 <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-20 hidden z-40"></div>
 
+
+
 <script>
+  function moneyWhole(n) {
+  const v = Math.floor(Number(n) || 0);
+  return "$" + v.toLocaleString();
+}
+
+// DEMO SCALING: divide by 10 (35800 -> 3580)
+function moneyDemoScaled(n, scale=10) {
+  const v = Math.floor((Number(n) || 0) / scale);
+  return "$" + v.toLocaleString();
+}
+
 const API_BASE = "http://localhost:8000";
 
 let accuracyChart, accuracyDeltaChart, overrideChart;
@@ -225,7 +238,7 @@ async function loadPhase1Summary(){
 
     totalActions.innerText = s.total ?? 0; animateKPI(totalActions);
     humanReview.innerText = s.human_review ?? 0; animateKPI(humanReview);
-    totalDiscount.innerText = "$" + Number(s.total_discount || 0).toFixed(0); animateKPI(totalDiscount);
+    totalDiscount.innerText = moneyDemoScaled(s.total_discount || 0, 10); animateKPI(totalDiscount);
     autoEmails.innerText = s.auto_emails ?? 0; animateKPI(autoEmails);
     autoDiscounts.innerText = s.discounts_offered ?? 0; animateKPI(autoDiscounts);
 
@@ -448,13 +461,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   setInterval(checkPhaseStatus, 10000);
   setInterval(loadPhase1Summary, 10000);
 
-  // refresh first page only if user is at top (avoid breaking scroll)
-  setInterval(async ()=>{
-    const scroller = document.getElementById("feedScroll");
-    if(scroller && scroller.scrollTop < 10){
-      await loadActions(true);
-    }
-  }, 15000);
 });
 </script>
 

@@ -61,6 +61,9 @@ def risk_label(prob: float) -> str:
         return "LOW"
     return "NO_RISK"
 
+# =========================================================
+# PHASE 0 CUSTOMERS SUMMARY
+# =========================================================
 
 @router.get("/summary")
 def dashboard_summary():

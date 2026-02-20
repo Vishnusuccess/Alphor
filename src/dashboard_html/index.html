@@ -5,6 +5,8 @@
   <title>Alphor Churn Dashboard — Phase 0</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- CSV parsing (client-side header preview) -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
 
 <body class="bg-gray-100 text-gray-800">
@@ -53,13 +55,123 @@
   <!-- UPLOAD CSV -->
   <section class="bg-white mx-6 p-6 rounded-xl shadow-md mb-6">
     <h2 class="text-xl font-semibold mb-4">Upload Customer CSV</h2>
+
     <div class="flex flex-col md:flex-row items-start md:items-center gap-4">
-      <input type="file" id="csvFile" class="border rounded px-4 py-2 w-full md:w-auto" />
-      <button onclick="uploadCSV()" class="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition">
-        Run Phase 0 Prediction
+      <input type="file" id="csvFile" class="border rounded px-4 py-2 w-full md:w-auto" accept=".csv" />
+      <button onclick="startMappingReview()" class="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition">
+        Review Mapping
+      </button>
+      <button id="runPredictBtn" onclick="uploadCSV()" class="bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition hidden">
+        Confirm Mapping & Run Prediction
       </button>
     </div>
-    <p id="uploadStatus" class="text-sm mt-3 text-gray-600"></p>
+
+    <div class="mt-3 flex flex-col gap-1">
+      <p id="uploadStatus" class="text-sm text-gray-600"></p>
+      <p id="mappingStatus" class="text-sm text-gray-600"></p>
+    </div>
+  </section>
+
+  <!-- CANONICAL MAPPING REVIEW (MOCKUP UI) -->
+  <section id="mappingPanel" class="hidden bg-white mx-6 p-6 rounded-xl shadow-md mb-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-semibold">Canonical Mapping Review</h2>
+        <p class="text-sm text-gray-600 mt-1">
+          We auto-detected column mappings to the model’s canonical feature contract. Low-confidence fields require review.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="mappingBadge" class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">Not Ready</span>
+      </div>
+    </div>
+
+    <!-- Stepper -->
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="rounded-xl border bg-gray-50 p-4">
+        <p class="text-xs text-gray-500">Step 1</p>
+        <p class="font-semibold">Detect Headers</p>
+        <p id="step1" class="text-sm text-gray-600 mt-1">Pending</p>
+      </div>
+      <div class="rounded-xl border bg-gray-50 p-4">
+        <p class="text-xs text-gray-500">Step 2</p>
+        <p class="font-semibold">Auto Map + Confidence</p>
+        <p id="step2" class="text-sm text-gray-600 mt-1">Pending</p>
+      </div>
+      <div class="rounded-xl border bg-gray-50 p-4">
+        <p class="text-xs text-gray-500">Step 3</p>
+        <p class="font-semibold">Resolve Low Confidence</p>
+        <p id="step3" class="text-sm text-gray-600 mt-1">Pending</p>
+      </div>
+    </div>
+
+    <!-- Summary chips -->
+    <div class="mt-4 flex flex-wrap gap-2">
+      <span class="text-xs px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold">
+        High confidence: <span id="highConfCount">0</span>
+      </span>
+      <span class="text-xs px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 font-semibold">
+        Medium confidence: <span id="medConfCount">0</span>
+      </span>
+      <span class="text-xs px-3 py-1 rounded-full bg-red-50 text-red-700 font-semibold">
+        Low confidence: <span id="lowConfCount">0</span>
+      </span>
+      <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+        Missing canonicals: <span id="missingCanonCount">0</span>
+      </span>
+      <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-semibold">
+        Extra columns: <span id="extraColCount">0</span>
+      </span>
+    </div>
+
+    <!-- Mapping table -->
+    <div class="mt-5 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-2 text-left">Client Column</th>
+            <th class="px-4 py-2 text-left">Suggested Canonical Feature</th>
+            <th class="px-4 py-2 text-left">Confidence</th>
+            <th class="px-4 py-2 text-left">Transform</th>
+            <th class="px-4 py-2 text-left">Notes</th>
+          </tr>
+        </thead>
+        <tbody id="mappingTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Missing / Extra -->
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="rounded-xl border bg-white p-4">
+        <h3 class="font-semibold">Missing Canonical Features</h3>
+        <p class="text-sm text-gray-600 mt-1">These will be filled with safe defaults during inference.</p>
+        <div id="missingCanonList" class="mt-3 flex flex-wrap gap-2"></div>
+      </div>
+
+      <div class="rounded-xl border bg-white p-4">
+        <h3 class="font-semibold">Extra Client Columns</h3>
+        <p class="text-sm text-gray-600 mt-1">We’ll store these for future retraining candidates (Phase 2→3).</p>
+        <div id="extraColsList" class="mt-3 flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="mt-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      <div class="text-sm text-gray-600">
+        <p><span class="font-semibold">Behavior:</span> Mapping is only a UI step. Prediction still uses your existing backend.</p>
+        <p class="text-xs text-gray-500 mt-1">Optionally, we send mapping JSON to backend (backend can ignore for now).</p>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="autoFixLowConfidence()" class="bg-gray-900 text-white px-5 py-2 rounded-xl hover:bg-black transition">
+          Auto-fix low confidence
+        </button>
+        <button onclick="finalizeMapping()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition">
+          Finalize Mapping
+        </button>
+      </div>
+    </div>
   </section>
 
   <!-- MODEL METRICS -->
@@ -120,7 +232,7 @@
 <script>
 const API_BASE = "http://localhost:8000";
 
-let customerData = [];     // only loaded pages (for quick lookup if needed)
+let customerData = [];
 let metricsChart;
 let prevAccuracyValue = 0;
 
@@ -129,7 +241,53 @@ const PAGE_SIZE = 200;
 let loadingMore = false;
 let reachedEnd = false;
 
-// ---------------- UTILITY ----------------
+/** =======================
+ *  CANONICAL FEATURES (mock contract)
+ *  ======================= */
+const CANONICAL_FEATURES = [
+  "period", "age", "gender", "seniority_insured", "seniority_policy",
+  "exposure_time", "type_policy", "type_product", "reimbursement",
+  "new_business", "distribution_channel", "premium", "cost_claims_year",
+  "n_medical_services", "n_insured_pc", "n_insured_mun", "n_insured_prov",
+];
+
+// simple synonyms for auto-mapping demo
+const SYNONYMS = {
+  period: ["month", "period", "policy_period", "billing_period"],
+  age: ["age", "cust_age", "client_age", "insured_age"],
+  gender: ["gender", "sex", "insured_gender"],
+  seniority_insured: ["seniority_insured", "insured_tenure", "tenure_insured", "years_insured"],
+  seniority_policy: ["seniority_policy", "policy_tenure", "policy_length", "tenure_policy", "policy_months"],
+  exposure_time: ["exposure", "exposure_time", "exposure_days", "exposure_months"],
+  type_policy: ["type_policy", "policy_type", "policy_kind"],
+  type_product: ["type_product", "product_type", "plan_type", "product"],
+  reimbursement: ["reimbursement", "reimb", "reimb_rate", "refund_ratio"],
+  new_business: ["new_business", "is_new", "new_customer", "newbiz"],
+  distribution_channel: ["distribution_channel", "channel", "sales_channel", "broker_channel"],
+  premium: ["premium", "monthly_premium", "premium_monthly", "annual_premium", "prem", "premium_amount"],
+  cost_claims_year: ["cost_claims_year", "claims_cost", "annual_claim_cost", "claim_cost_year"],
+  n_medical_services: ["n_medical_services", "medical_services", "num_services", "service_count"],
+  n_insured_pc: ["n_insured_pc", "insured_postcode", "insured_pc", "postcode"],
+  n_insured_mun: ["n_insured_mun", "municipality", "mun", "city_code", "city"],
+  n_insured_prov: ["n_insured_prov", "province", "prov", "state", "region_prov"],
+};
+
+// low confidence threshold for demo
+const LOW_CONF_THRESHOLD = 0.65;
+
+// mapping state (mock)
+let mappingDraft = {
+  fileName: "",
+  clientColumns: [],
+  mappings: {},      // clientCol -> { canonical, confidence, transform, note }
+  missingCanon: [],
+  extraCols: [],
+  isReady: false,
+};
+
+/** =======================
+ *  EXISTING UTILITY (kept)
+ *  ======================= */
 function riskLabel(prob) {
   prob = Number(prob) || 0;
   if (prob >= 0.6) return { label: "High", color: "bg-red-100 text-red-700" };
@@ -137,7 +295,9 @@ function riskLabel(prob) {
   return { label: "Low", color: "bg-green-100 text-green-700" };
 }
 
-// ---------------- PHASE 0 SUMMARY (KPIs for ALL customers) ----------------
+/** =======================
+ *  PHASE 0 SUMMARY (KPIs)
+ *  ======================= */
 async function loadPhase0Summary() {
   try {
     const res = await fetch(`${API_BASE}/dashboard/phase0/summary`, { cache: "no-store" });
@@ -149,7 +309,6 @@ async function loadPhase0Summary() {
     mediumRiskCount.innerText = s.medium ?? 0;
     lowRiskCount.innerText = s.low ?? 0;
 
-    // Optional: show Phase1-ready banner based on system phase/flag
     if (s.phase_1_ready === true) {
       document.getElementById("phaseTransition").classList.remove("hidden");
     } else {
@@ -160,7 +319,9 @@ async function loadPhase0Summary() {
   }
 }
 
-// ---------------- TABLE APPEND (fast) ----------------
+/** =======================
+ *  TABLE APPEND (kept)
+ *  ======================= */
 function appendTableRows(rows) {
   const table = document.getElementById("customerTable");
 
@@ -194,7 +355,9 @@ function appendTableRows(rows) {
   });
 }
 
-// ---------------- PHASE 0 CUSTOMERS (PAGINATED) ----------------
+/** =======================
+ *  PHASE 0 CUSTOMERS (kept)
+ *  ======================= */
 async function loadPhase0Customers(reset=false) {
   if (loadingMore) return;
   if (!reset && reachedEnd) return;
@@ -241,7 +404,9 @@ async function loadPhase0Customers(reset=false) {
   }
 }
 
-// ---------------- FEEDBACK ----------------
+/** =======================
+ *  FEEDBACK (kept)
+ *  ======================= */
 async function submitAllFeedback() {
   const feedbackElements = document.querySelectorAll(".feedback-select");
   const feedbackData = [];
@@ -266,13 +431,339 @@ async function submitAllFeedback() {
   }
 }
 
-// ---------------- CSV UPLOAD ----------------
+/** ==========================================================
+ *  MOCK MAPPING REVIEW (NEW)
+ *  ========================================================== */
+function normColName(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-]+/g, "_")
+    .replace(/[^\w_]/g, "");
+}
+
+function similarity(a, b) {
+  // tiny, deterministic similarity score (0..1)
+  a = normColName(a);
+  b = normColName(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  // substring bonus
+  if (a.includes(b) || b.includes(a)) return 0.88;
+
+  // token overlap
+  const at = new Set(a.split("_").filter(Boolean));
+  const bt = new Set(b.split("_").filter(Boolean));
+  let inter = 0;
+  for (const t of at) if (bt.has(t)) inter++;
+  const union = new Set([...at, ...bt]).size || 1;
+  return inter / union; // Jaccard
+}
+
+function suggestCanonical(clientCol) {
+  const n = normColName(clientCol);
+
+  // exact canonical hit
+  if (CANONICAL_FEATURES.includes(n)) {
+    return { canonical: n, confidence: 0.99, transform: "none", note: "Exact match" };
+  }
+
+  // synonyms scan
+  let best = { canonical: "", score: 0, via: "" };
+  for (const canon of CANONICAL_FEATURES) {
+    const syns = SYNONYMS[canon] || [canon];
+    for (const s of syns) {
+      const sc = similarity(n, s);
+      if (sc > best.score) best = { canonical: canon, score: sc, via: s };
+    }
+  }
+
+  // unit transform demo for premium
+  let transform = "none";
+  let note = best.via ? `Matched via "${best.via}"` : "Heuristic match";
+  if (best.canonical === "premium") {
+    if (n.includes("monthly")) { transform = "monthly_to_annual (*12)"; note += " + unit hint"; }
+    else if (n.includes("annual") || n.includes("year")) { transform = "annual (no change)"; note += " + unit hint"; }
+  }
+
+  // convert score to “confidence”
+  const confidence = Math.max(0, Math.min(0.95, best.score * 0.95));
+
+  // if weak match, default to ignore
+  if (confidence < 0.35) {
+    return { canonical: "", confidence: 0.10, transform: "ignore", note: "No reliable match" };
+  }
+
+  return { canonical: best.canonical, confidence, transform, note };
+}
+
+function confidenceBadge(conf) {
+  const pct = Math.round((conf || 0) * 100);
+  if (conf >= 0.85) return { text: `${pct}% (High)`, cls: "bg-green-50 text-green-700" };
+  if (conf >= 0.65) return { text: `${pct}% (Medium)`, cls: "bg-yellow-50 text-yellow-700" };
+  return { text: `${pct}% (Low)`, cls: "bg-red-50 text-red-700" };
+}
+
+function renderChip(text) {
+  const span = document.createElement("span");
+  span.className = "text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700";
+  span.textContent = text;
+  return span;
+}
+
+function setStepper(step1, step2, step3) {
+  document.getElementById("step1").innerText = step1;
+  document.getElementById("step2").innerText = step2;
+  document.getElementById("step3").innerText = step3;
+}
+
+async function startMappingReview() {
+  const file = document.getElementById("csvFile").files[0];
+  if (!file) return alert("Please select a CSV file");
+
+  document.getElementById("mappingPanel").classList.remove("hidden");
+  document.getElementById("runPredictBtn").classList.add("hidden");
+  document.getElementById("mappingStatus").innerText = "Reading headers & generating mapping suggestions...";
+  document.getElementById("mappingBadge").innerText = "In Review";
+  document.getElementById("mappingBadge").className = "text-xs px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 font-semibold";
+
+  mappingDraft = {
+    fileName: file.name,
+    clientColumns: [],
+    mappings: {},
+    missingCanon: [],
+    extraCols: [],
+    isReady: false,
+  };
+
+  setStepper("Running...", "Pending", "Pending");
+
+  // Parse only headers (and first row) for speed
+  Papa.parse(file, {
+    header: true,
+    preview: 1,
+    skipEmptyLines: true,
+    complete: (results) => {
+      const cols = (results.meta && results.meta.fields) ? results.meta.fields : [];
+      mappingDraft.clientColumns = cols;
+
+      setStepper(`✅ Found ${cols.length} columns`, "Running...", "Pending");
+
+      // build mapping suggestions
+      const usedCanon = new Set();
+      const rows = [];
+      for (const col of cols) {
+        const sug = suggestCanonical(col);
+
+        // avoid mapping multiple client cols to same canonical (demo rule)
+        // if conflict and confidence isn't super high -> mark low confidence
+        if (sug.canonical && usedCanon.has(sug.canonical) && sug.confidence < 0.92) {
+          mappingDraft.mappings[col] = {
+            canonical: "",
+            confidence: 0.25,
+            transform: "ignore",
+            note: `Conflict: canonical "${sug.canonical}" already used`
+          };
+        } else {
+          mappingDraft.mappings[col] = sug;
+          if (sug.canonical) usedCanon.add(sug.canonical);
+        }
+
+        rows.push({ clientCol: col, ...mappingDraft.mappings[col] });
+      }
+
+      // missing canonicals
+      const mappedCanon = new Set(Object.values(mappingDraft.mappings).map(x => x.canonical).filter(Boolean));
+      mappingDraft.missingCanon = CANONICAL_FEATURES.filter(f => !mappedCanon.has(f));
+
+      // extras = those not mapped to canonical
+      mappingDraft.extraCols = cols.filter(c => !mappingDraft.mappings[c].canonical);
+
+      renderMappingTable(rows);
+      renderMissingAndExtras();
+      updateMappingCounters();
+
+      setStepper(`✅ Found ${cols.length} columns`, "✅ Suggestions generated", "Needs review (if low confidence exists)");
+
+      document.getElementById("mappingStatus").innerText = "Review mapping suggestions. Resolve low-confidence rows, then Finalize Mapping.";
+    },
+    error: (err) => {
+      console.error(err);
+      document.getElementById("mappingStatus").innerText = "Failed to read CSV headers.";
+      setStepper("⚠ Failed", "Pending", "Pending");
+    }
+  });
+}
+
+function renderMappingTable(rows) {
+  const tbody = document.getElementById("mappingTable");
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const conf = r.confidence ?? 0;
+    const badge = confidenceBadge(conf);
+
+    const tr = document.createElement("tr");
+    tr.className = "border-t";
+
+    // dropdown options
+    const opts = [
+      `<option value="">-- Ignore / Extra --</option>`,
+      ...CANONICAL_FEATURES.map(f => `<option value="${f}">${f}</option>`)
+    ].join("");
+
+    tr.innerHTML = `
+      <td class="px-4 py-2 font-medium">${r.clientCol}</td>
+      <td class="px-4 py-2">
+        <select class="map-select border rounded px-2 py-1 text-sm w-full"
+                data-clientcol="${encodeURIComponent(r.clientCol)}">
+          ${opts}
+        </select>
+      </td>
+      <td class="px-4 py-2">
+        <span class="text-xs px-2 py-1 rounded-full ${badge.cls} font-semibold">${badge.text}</span>
+      </td>
+      <td class="px-4 py-2">
+        <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">${r.transform || "none"}</span>
+      </td>
+      <td class="px-4 py-2 text-gray-600">${r.note || ""}</td>
+    `;
+
+    tbody.appendChild(tr);
+
+    // set initial selected
+    const sel = tr.querySelector(".map-select");
+    sel.value = r.canonical || "";
+
+    // change handler
+    sel.addEventListener("change", (e) => {
+      const clientCol = decodeURIComponent(e.target.dataset.clientcol);
+      const canon = e.target.value || "";
+      const old = mappingDraft.mappings[clientCol] || {};
+
+      // set new canonical, adjust confidence if user overrides (demo)
+      mappingDraft.mappings[clientCol] = {
+        ...old,
+        canonical: canon,
+        confidence: canon ? Math.max(old.confidence || 0.5, 0.8) : (old.confidence || 0.3),
+        note: canon ? "User confirmed mapping" : "User chose to ignore / keep as extra",
+      };
+
+      // recompute missing/extras
+      const mappedCanon = new Set(Object.values(mappingDraft.mappings).map(x => x.canonical).filter(Boolean));
+      mappingDraft.missingCanon = CANONICAL_FEATURES.filter(f => !mappedCanon.has(f));
+      mappingDraft.extraCols = mappingDraft.clientColumns.filter(c => !mappingDraft.mappings[c].canonical);
+
+      renderMissingAndExtras();
+      updateMappingCounters();
+    });
+  });
+}
+
+function renderMissingAndExtras() {
+  const missing = document.getElementById("missingCanonList");
+  const extras = document.getElementById("extraColsList");
+  missing.innerHTML = "";
+  extras.innerHTML = "";
+
+  mappingDraft.missingCanon.forEach(f => missing.appendChild(renderChip(f)));
+  mappingDraft.extraCols.forEach(c => extras.appendChild(renderChip(c)));
+
+  document.getElementById("missingCanonCount").innerText = mappingDraft.missingCanon.length;
+  document.getElementById("extraColCount").innerText = mappingDraft.extraCols.length;
+}
+
+function updateMappingCounters() {
+  let hi = 0, med = 0, lo = 0;
+  for (const col of mappingDraft.clientColumns) {
+    const m = mappingDraft.mappings[col];
+    if (!m || !m.canonical) continue; // extras ignored for confidence stats
+    const c = m.confidence || 0;
+    if (c >= 0.85) hi++;
+    else if (c >= 0.65) med++;
+    else lo++;
+  }
+  document.getElementById("highConfCount").innerText = hi;
+  document.getElementById("medConfCount").innerText = med;
+  document.getElementById("lowConfCount").innerText = lo;
+
+  // ready if no low-confidence mapped rows
+  const hasLow = lo > 0;
+  mappingDraft.isReady = !hasLow;
+
+  if (mappingDraft.isReady) {
+    document.getElementById("mappingBadge").innerText = "Ready";
+    document.getElementById("mappingBadge").className = "text-xs px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold";
+    setStepper(document.getElementById("step1").innerText, document.getElementById("step2").innerText, "✅ Ready");
+  } else {
+    document.getElementById("mappingBadge").innerText = "Needs Review";
+    document.getElementById("mappingBadge").className = "text-xs px-3 py-1 rounded-full bg-red-50 text-red-700 font-semibold";
+    setStepper(document.getElementById("step1").innerText, document.getElementById("step2").innerText, "⚠ Resolve low confidence");
+  }
+}
+
+function autoFixLowConfidence() {
+  // demo: for any mapped canonical with low confidence, bump to medium
+  for (const col of mappingDraft.clientColumns) {
+    const m = mappingDraft.mappings[col];
+    if (!m || !m.canonical) continue;
+    if ((m.confidence || 0) < LOW_CONF_THRESHOLD) {
+      mappingDraft.mappings[col] = { ...m, confidence: 0.75, note: "Auto-fixed (demo)" };
+    }
+  }
+
+  // re-render selects to reflect state
+  const rows = mappingDraft.clientColumns.map(c => ({ clientCol: c, ...mappingDraft.mappings[c] }));
+  renderMappingTable(rows);
+  renderMissingAndExtras();
+  updateMappingCounters();
+
+  document.getElementById("mappingStatus").innerText = "Auto-fix applied. Click Finalize Mapping to proceed.";
+}
+
+function finalizeMapping() {
+  // require user to resolve low confidence (demo)
+  updateMappingCounters();
+  if (!mappingDraft.isReady) {
+    document.getElementById("mappingStatus").innerText =
+      "Please resolve low-confidence mappings (or use Auto-fix) before running prediction.";
+    return;
+  }
+
+  document.getElementById("mappingStatus").innerText =
+    "✅ Mapping finalized. You can now run prediction with your existing backend.";
+
+  document.getElementById("runPredictBtn").classList.remove("hidden");
+}
+
+/** =======================
+ *  CSV UPLOAD (kept, but now sends mapping JSON too)
+ *  ======================= */
 async function uploadCSV() {
   const file = document.getElementById("csvFile").files[0];
   if (!file) return alert("Please select a CSV file");
 
+  // If mapping panel is open, enforce finalize (for the demo video)
+  const mappingPanelVisible = !document.getElementById("mappingPanel").classList.contains("hidden");
+  if (mappingPanelVisible && !mappingDraft.isReady) {
+    alert("Please finalize mapping first (resolve low confidence).");
+    return;
+  }
+
   const formData = new FormData();
   formData.append("file", file);
+
+  // Optional: send mapping JSON (backend can ignore for now)
+  if (mappingDraft && mappingDraft.clientColumns && mappingDraft.clientColumns.length > 0) {
+    formData.append("mapping_json", JSON.stringify({
+      contract_version: "v1",
+      canonical_features: CANONICAL_FEATURES,
+      mappings: mappingDraft.mappings,
+      missing_canonical: mappingDraft.missingCanon,
+      extra_columns: mappingDraft.extraCols
+    }));
+  }
 
   document.getElementById("uploadStatus").innerText = "Processing...";
 
@@ -283,7 +774,6 @@ async function uploadCSV() {
     const data = await res.json();
     document.getElementById("uploadStatus").innerText = data.message || "Uploaded";
 
-    // Refresh KPIs + reload table from top
     await loadPhase0Summary();
     await loadPhase0Customers(true);
   } catch (err) {
@@ -292,7 +782,9 @@ async function uploadCSV() {
   }
 }
 
-// ---------------- RETRAIN MODEL ----------------
+/** =======================
+ *  RETRAIN (kept)
+ *  ======================= */
 async function retrainModel() {
   document.getElementById("retrainStatus").innerText = "Retraining in progress...";
   try {
@@ -317,7 +809,9 @@ async function retrainModel() {
   }
 }
 
-// ---------------- METRICS CHART ----------------
+/** =======================
+ *  METRICS (kept)
+ *  ======================= */
 async function loadMetrics() {
   try {
     const res = await fetch(`${API_BASE}/dashboard/metrics`, { cache: "no-store" });
@@ -362,13 +856,14 @@ function goToPhase1() {
   window.location.href = "phase1.html";
 }
 
-// ---------------- INIT ----------------
+/** =======================
+ *  INIT (kept)
+ *  ======================= */
 document.addEventListener("DOMContentLoaded", async () => {
   await loadPhase0Summary();
   await loadPhase0Customers(true);
   await loadMetrics();
 
-  // infinite scroll
   const scroller = document.getElementById("tableScroller");
   if (scroller) {
     scroller.addEventListener("scroll", async () => {
@@ -377,15 +872,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Refresh summary periodically (KPIs always correct)
   setInterval(loadPhase0Summary, 10000);
 
-  // Optional: refresh table only if user is at top (prevents wiping while scrolling)
-  setInterval(async () => {
-    const sc = document.getElementById("tableScroller");
-    if (!sc) return;
-    if (sc.scrollTop < 10) await loadPhase0Customers(true);
-  }, 15000);
 });
 </script>
 
